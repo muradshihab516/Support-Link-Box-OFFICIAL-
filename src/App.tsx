@@ -12,6 +12,7 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { ReportModal } from './components/member/ReportModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const AppContent: React.FC = () => {
   const { currentMember } = useApp();
@@ -131,8 +132,10 @@ const AppContent: React.FC = () => {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

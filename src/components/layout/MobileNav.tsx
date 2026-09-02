@@ -5,9 +5,10 @@ import { useApp } from '../../context/AppContext';
 interface MobileNavProps {
   currentView: string;
   onNavigate: (view: string) => void;
+  onSubmitLink?: () => void;
 }
 
-export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
+export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, onSubmitLink }) => {
   const { currentUser, getTodaySupportStats } = useApp();
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
 

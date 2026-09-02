@@ -28,9 +28,11 @@ import { cleanAndFormatFacebookUrl } from '../../utils/facebookLinks';
 
 interface DailyLinksViewProps {
   onNavigate?: (view: string) => void;
+  onSubmitLink?: () => void;
+  onOpenReport?: (linkInfo?: { id: string; number: number; member: string }) => void;
 }
 
-export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate }) => {
+export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSubmitLink, onOpenReport }) => {
   const { 
     currentUser, 
     dailyLinks, 

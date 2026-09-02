@@ -11,12 +11,13 @@ export type SponsorPosition =
   | 'top_banner' 
   | 'dashboard_banner' 
   | 'leaderboard_sponsor' 
+  | 'leaderboard_top'
   | 'sidebar' 
   | 'between_content' 
   | 'footer';
 
 export type ReportCategory = 'broken_link' | 'fake_support' | 'inappropriate_content' | 'profile_issue' | 'other';
-export type ReportStatus = 'open' | 'resolved' | 'dismissed';
+export type ReportStatus = 'open' | 'pending' | 'resolved' | 'dismissed';
 
 export type Sponsor = SponsorAd;
 export type RevenueLog = RevenueRecord;
@@ -40,10 +41,15 @@ export interface Member {
   avatar: string;
   facebookUrl: string;
   joinDate: string;
+  joinedAt?: string;
   role: UserRole;
   status: MemberStatus;
   totalLinksSubmitted: number;
+  linksSubmitted?: number;
   totalSupportsCompleted: number;
+  supportsCompleted?: number;
+  completionRate?: number;
+  dailySupportsDone?: number;
   totalPoints: number;
   weeklyPoints: number;
   currentRank: number;
@@ -87,6 +93,9 @@ export interface SupportRecord {
   date: string; // YYYY-MM-DD
   status: 'verified' | 'pending_review' | 'flagged';
   communityId: string;
+  supporterName?: string;
+  supporterUsername?: string;
+  supporterAvatar?: string;
 }
 
 export interface WeeklyWinner {
@@ -110,6 +119,10 @@ export interface WeeklySession {
   totalSupports: number;
   winners: WeeklyWinner[];
   communityId: string;
+  totalParticipants?: number;
+  totalLinksExchanged?: number;
+  topPerformerName?: string;
+  topPerformerPoints?: number;
 }
 
 export interface Notice {
@@ -130,6 +143,7 @@ export interface Report {
   id: string;
   reporterId: string;
   reporterName: string;
+  reporterUsername?: string;
   category: ReportCategory;
   description: string;
   targetLinkId?: string;
@@ -160,6 +174,7 @@ export interface SponsorAd {
   pricePaid?: number;
   packageType: 'basic_banner' | 'premium_banner' | 'leaderboard_sponsor' | 'featured_sponsor';
   communityId: string;
+  createdAt?: string;
 }
 
 export interface AffiliateCampaign {
@@ -213,7 +228,9 @@ export interface Community {
 export interface SystemSettings {
   communityName: string;
   tagline: string;
+  communityTagline?: string;
   supportDeadlineTime: string; // e.g. "23:59" or "12:00 AM"
+  dailyDeadlineTime?: string;
   timezone: string;
   pointsSchema: {
     first: number;
@@ -222,6 +239,9 @@ export interface SystemSettings {
     fourth: number;
     fifth: number;
   };
+  maxDailySubmissionsPerMember?: number;
+  inactivityThresholdDays?: number;
+  allowDuplicateLinks?: boolean;
   autoFreezeAfterDays: number;
   minSupportRequiredPercent: number;
   allowAutoUnfreezeOnSubmit: boolean;
@@ -233,11 +253,13 @@ export interface SystemSettings {
 
 export interface RevenueRecord {
   id: string;
-  source: 'direct_sponsor' | 'ad_network' | 'affiliate' | 'custom';
+  source: 'direct_sponsor' | 'ad_network' | 'affiliate' | 'custom' | 'sponsor_direct';
   sponsorOrNetworkName: string;
   amount: number;
   currency: string;
   period: string; // e.g. "2026-08"
   date: string;
   note?: string;
+  notes?: string;
+  reference?: string;
 }

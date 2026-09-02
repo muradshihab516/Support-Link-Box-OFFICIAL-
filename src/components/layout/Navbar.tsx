@@ -24,9 +24,11 @@ import { AuthModal } from '../auth/AuthModal';
 interface NavbarProps {
   currentView: string;
   onNavigate: (view: string) => void;
+  onSubmitLink?: () => void;
+  onOpenAuthModal?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
+export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmitLink, onOpenAuthModal }) => {
   const { 
     currentUser, 
     currentCommunity, 

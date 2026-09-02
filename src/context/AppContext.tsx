@@ -17,6 +17,7 @@ import {
   MemberStatus,
   NoticeType,
   ReportCategory,
+  ReportStatus,
   Badge
 } from '../types';
 import {
@@ -96,7 +97,7 @@ interface AppContextType {
   deleteNotice: (noticeId: string) => void;
 
   // Reports
-  resolveReport: (reportId: string, adminNotes: string) => void;
+  resolveReport: (reportId: string, statusOrNotes?: string, adminNotes?: string) => void;
   dismissReport: (reportId: string, adminNotes: string) => void;
   deleteReport: (reportId: string) => void;
 
@@ -811,14 +812,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Reports
-  const resolveReport = (reportId: string, adminNotes: string) => {
+  const resolveReport = (reportId: string, statusOrNotes?: string, maybeNotes?: string) => {
+    let finalStatus: ReportStatus = 'resolved';
+    let finalNotes = '';
+    if (statusOrNotes === 'resolved' || statusOrNotes === 'dismissed' || statusOrNotes === 'open') {
+      finalStatus = statusOrNotes;
+      finalNotes = maybeNotes || '';
+    } else {
+      finalNotes = statusOrNotes || '';
+    }
+
     setReports(prev => prev.map(r => r.id === reportId ? { 
       ...r, 
-      status: 'resolved', 
-      adminNotes, 
+      status: finalStatus, 
+      adminNotes: finalNotes, 
       resolvedBy: currentUser ? currentUser.name : 'Admin' 
     } : r));
-    addAuditLog('RESOLVE_REPORT', 'report', reportId, reportId, `Resolved report. Notes: ${adminNotes}`);
+    addAuditLog('RESOLVE_REPORT', 'report', reportId, reportId, `Report marked as ${finalStatus}. Notes: ${finalNotes}`);
   };
 
   const dismissReport = (reportId: string, adminNotes: string) => {

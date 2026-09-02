@@ -9,6 +9,7 @@ interface ReportModalProps {
   targetLinkId?: string;
   targetMemberId?: string;
   targetName?: string;
+  prefilledLinkInfo?: { id: string; number: number; member: string };
 }
 
 export const ReportModal: React.FC<ReportModalProps> = ({
@@ -16,8 +17,11 @@ export const ReportModal: React.FC<ReportModalProps> = ({
   onClose,
   targetLinkId,
   targetMemberId,
-  targetName
+  targetName,
+  prefilledLinkInfo
 }) => {
+  const effectiveLinkId = prefilledLinkInfo?.id || targetLinkId;
+  const effectiveTargetName = prefilledLinkInfo ? `${prefilledLinkInfo.member} (Link #${prefilledLinkInfo.number})` : targetName;
   const { submitReport } = useApp();
   const [category, setCategory] = useState<ReportCategory>('broken_link');
   const [description, setDescription] = useState('');
@@ -33,7 +37,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
       return;
     }
 
-    const res = submitReport(category, description.trim(), targetLinkId, targetMemberId, screenshotUrl.trim());
+    const res = submitReport(category, description.trim(), effectiveLinkId, targetMemberId, screenshotUrl.trim());
     if (res.success) {
       setStatusMsg({ type: 'success', text: res.message });
       setTimeout(() => {

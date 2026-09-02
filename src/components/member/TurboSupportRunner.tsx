@@ -83,7 +83,7 @@ export const TurboSupportRunner: React.FC<TurboSupportRunnerProps> = ({
   const isOwnLink = currentUser ? currentLink.memberId === currentUser.id : false;
 
   const totalEligible = allLinks.length;
-  const supportedCount = stats?.supportedCount || 0;
+  const supportedCount = stats?.completedCount || 0;
   const progressPercent = totalEligible > 0 ? Math.round((supportedCount / totalEligible) * 100) : 0;
 
   const handleOpenPost = (overrideMode?: 'm' | 'mbasic' | 'www') => {

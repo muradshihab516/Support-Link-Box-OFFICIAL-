@@ -28,9 +28,11 @@ import { ReportModal } from './ReportModal';
 
 interface MemberDashboardProps {
   onNavigate: (view: string) => void;
+  onSubmitLink?: () => void;
+  onOpenReport?: (linkInfo?: { id: string; number: number; member: string }) => void;
 }
 
-export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate }) => {
+export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, onSubmitLink, onOpenReport }) => {
   const { 
     currentUser, 
     dailyLinks, 

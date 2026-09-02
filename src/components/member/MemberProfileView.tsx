@@ -18,9 +18,10 @@ import { getStatusBadgeColor } from '../../utils/helpers';
 interface MemberProfileViewProps {
   memberId?: string;
   onNavigate?: (view: string) => void;
+  onOpenReport?: (linkInfo?: { id: string; number: number; member: string }) => void;
 }
 
-export const MemberProfileView: React.FC<MemberProfileViewProps> = ({ memberId, onNavigate }) => {
+export const MemberProfileView: React.FC<MemberProfileViewProps> = ({ memberId, onNavigate, onOpenReport }) => {
   const { currentUser, members, badges, supportRecords, dailyLinks } = useApp();
 
   const targetMember = memberId 

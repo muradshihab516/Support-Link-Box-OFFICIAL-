@@ -116,7 +116,7 @@ export const BulkImportModal: React.FC = () => {
     }
 
     setIsProcessing(true);
-    const count = bulkImportMembers(validToImport.map(r => ({
+    const result = bulkImportMembers(validToImport.map(r => ({
       name: r.name,
       username: r.username,
       email: `${r.username}@community.local`,
@@ -124,7 +124,7 @@ export const BulkImportModal: React.FC = () => {
     })));
     setIsProcessing(false);
 
-    setImportResult({ count, skipped: skippedCount });
+    setImportResult({ count: result.imported, skipped: skippedCount });
     setParsedRows([]);
     setRawText('');
   };
