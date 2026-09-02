@@ -12,10 +12,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./assets/index.css">
   </head>
   <body class="bg-[#0A0A0B] text-gray-200 font-sans antialiased selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      // GitHub Pages / Static hosting fallback:
+      // If /src/main.tsx is not transpiled by Vite dev server, load pre-bundled JavaScript
+      setTimeout(() => {
+        if (!window.__SUPPORT_LINK_BOX_MOUNTED__) {
+          const s = document.createElement('script');
+          s.type = 'module';
+          s.crossOrigin = 'anonymous';
+          s.src = './assets/index.js';
+          document.body.appendChild(s);
+        }
+      }, 150);
+    </script>
   </body>
 </html>
 
