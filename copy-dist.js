@@ -21,12 +21,28 @@ try {
   const docsDir = path.resolve('./docs');
   const assetsDir = path.resolve('./assets');
 
-  if (fs.existsSync(distDir)) {
-    // 1. Copy dist to docs for GitHub Pages docs deployment
-    copyFolderSync(distDir, docsDir);
-    console.log('✓ Successfully copied dist/ to docs/ for GitHub Pages');
+  // 1. Create .nojekyll in root
+  fs.writeFileSync(path.resolve('./.nojekyll'), '');
 
-    // 2. Copy compiled assets to root assets for root index.html fallback
+  if (fs.existsSync(distDir)) {
+    // 2. Add .nojekyll and 404.html to dist
+    fs.writeFileSync(path.join(distDir, '.nojekyll'), '');
+    const distHtml = path.join(distDir, 'index.html');
+    if (fs.existsSync(distHtml)) {
+      fs.copyFileSync(distHtml, path.join(distDir, '404.html'));
+      fs.copyFileSync(distHtml, path.resolve('./404.html'));
+    }
+
+    // 3. Copy dist to docs for GitHub Pages docs deployment
+    copyFolderSync(distDir, docsDir);
+    fs.writeFileSync(path.join(docsDir, '.nojekyll'), '');
+    const docsHtml = path.join(docsDir, 'index.html');
+    if (fs.existsSync(docsHtml)) {
+      fs.copyFileSync(docsHtml, path.join(docsDir, '404.html'));
+    }
+    console.log('✓ Successfully prepared docs/ and dist/ with .nojekyll & 404.html for GitHub Pages');
+
+    // 4. Copy compiled assets to root assets for root index.html fallback
     const distAssetsDir = path.join(distDir, 'assets');
     if (fs.existsSync(distAssetsDir)) {
       copyFolderSync(distAssetsDir, assetsDir);
@@ -36,3 +52,4 @@ try {
 } catch (err) {
   console.error('Error during post-build copy:', err);
 }
+
