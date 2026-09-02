@@ -43,12 +43,29 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script type="module">
-      // Direct static host execution for GitHub Pages
+      // Direct static host execution for GitHub Pages fallback
       if (!window.location.host.includes('3000') && !window.location.host.includes('run.app')) {
         const s = document.createElement('script');
         s.type = 'module';
         s.crossOrigin = 'anonymous';
         s.src = './assets/index.js';
+        s.onerror = () => {
+          const root = document.getElementById('root');
+          if (root && root.children.length === 0) {
+            root.innerHTML = `
+              <div style="padding: 28px 20px; max-width: 440px; margin: 60px auto; text-align: center; font-family: system-ui, -apple-system, sans-serif; background: #121215; border: 1px solid #27272A; border-radius: 16px; color: #F4F4F5;">
+                <div style="font-size: 32px; margin-bottom: 12px;">⏳</div>
+                <h3 style="color: #818CF8; font-size: 18px; margin-bottom: 8px; font-weight: 600;">সাইট তৈরি হচ্ছে</h3>
+                <p style="font-size: 14px; color: #A1A1AA; line-height: 1.6; margin-bottom: 20px;">
+                  GitHub Actions আপনার সাইটটি বিল্ড করছে। অনুগ্রহ করে ১-২ মিনিট পর রিফ্রেশ করুন অথবা Settings > Pages এ <b>GitHub Actions</b> সিলেক্ট নিশ্চিত করুন।
+                </p>
+                <button onclick="window.location.reload()" style="background: #6366F1; color: #FFFFFF; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer;">
+                  🔄 রিলোড করুন
+                </button>
+              </div>
+            `;
+          }
+        };
         document.body.appendChild(s);
       }
     </script>
