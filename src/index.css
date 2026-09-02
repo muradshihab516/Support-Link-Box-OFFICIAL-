@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dark-bg: #0A0A0B;
+  --color-dark-surface: #0E0E10;
+  --color-dark-card: #131315;
+  --color-dark-border: #1E1E20;
+  --color-dark-muted: #27272A;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #0A0A0B;
+  color: #E4E4E7;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  margin: 0;
+  min-height: 100vh;
+}
+
+/* Elegant Dark scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0E0E10;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272A;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3F3F46;
+}
