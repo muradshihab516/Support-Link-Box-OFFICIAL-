@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en" class="dark" style="background-color: #0A0A0B; color: #E4E4E7;">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Support Link Box — Submit • Support • Grow</title>
+    <meta name="description" content="Support Link Box — Professional community support link tracking, daily tasks, automated leaderboards, streaks, and monetization management." />
+    <meta property="og:title" content="Support Link Box — Submit • Support • Grow" />
+    <meta property="og:description" content="Support Link Box — Professional community support link tracking, daily tasks, automated leaderboards, streaks, and monetization management." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./assets/index.css">
+    <style>
+      html, body {
+        background-color: #0A0A0B !important;
+        color: #E4E4E7 !important;
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        width: 100%;
+        overflow-x: hidden;
+      }
+      #root:empty::before {
+        content: '';
+        display: block;
+        width: 36px;
+        height: 36px;
+        margin: 40vh auto 0;
+        border: 3px solid rgba(99, 102, 241, 0.2);
+        border-top-color: #6366F1;
+        border-radius: 50%;
+        animation: slb-spin 0.8s linear infinite;
+      }
+      @keyframes slb-spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index.css">
+  </head>
+  <body style="background-color: #0A0A0B; color: #E4E4E7;" class="bg-[#0A0A0B] text-gray-200 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+    <div id="root"></div>
+  </body>
+</html>
+
