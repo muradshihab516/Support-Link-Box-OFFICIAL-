@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { DailyLink } from '../../types';
 import { 
@@ -15,11 +15,16 @@ import {
   Share2,
   Flag,
   Eye,
-  Zap
+  Zap,
+  ChevronDown,
+  Layers,
+  Play,
+  LayoutGrid
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
 import { TurboSupportRunner } from './TurboSupportRunner';
+import { YouTubeStyleSupportSession } from './YouTubeStyleSupportSession';
 import { ReportModal } from './ReportModal';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
 import { DisplayAdSlot } from '../monetization/DisplayAdSlot';
@@ -31,6 +36,8 @@ interface DailyLinksViewProps {
   onSubmitLink?: () => void;
   onOpenReport?: (linkInfo?: { id: string; number: number; member: string }) => void;
 }
+
+const PAGE_SIZE = 20;
 
 export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSubmitLink, onOpenReport }) => {
   const { 
@@ -48,55 +55,172 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
   const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string } | null>(null);
 
+  // Optimistic UI state for instant checkmark feedback
+  const [optimisticStatus, setOptimisticStatus] = useState<Record<string, boolean>>({});
+
+  // View Mode: Regular Card Grid vs YouTube Playlist Player Session
+  const [viewMode, setViewMode] = useState<'grid' | 'youtube_player'>('grid');
+  const [selectedPlayerLinkId, setSelectedPlayerLinkId] = useState<string | undefined>(undefined);
+
+  // Pagination & Lazy-load state
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const [batchRange, setBatchRange] = useState<'all' | '1-50' | '51-100' | '101-150' | '151-200'>('all');
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
-  const supportedSet = stats ? stats.supportedLinkIds : new Set<string>();
+  const supportedSet = useMemo(() => stats ? stats.supportedLinkIds : new Set<string>(), [stats]);
+
+  // Reset pagination when search, filter, or batch changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [filter, searchQuery, batchRange]);
 
   // Filter out currentUser's own link or flag it
-  const eligibleLinks = dailyLinks.filter(link => {
-    // If logged in, you don't support your own link
-    const isOwn = currentUser ? link.memberId === currentUser.id : false;
-    
-    // Search match
-    const matchesSearch = 
-      link.memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      link.memberUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (link.caption && link.caption.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (link.badgeTitle && link.badgeTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      link.linkNumber.toString().includes(searchQuery);
+  const eligibleLinks = useMemo(() => {
+    return dailyLinks.filter(link => {
+      const isOwn = currentUser ? link.memberId === currentUser.id : false;
+      
+      // Batch range filter
+      if (batchRange === '1-50' && (link.linkNumber < 1 || link.linkNumber > 50)) return false;
+      if (batchRange === '51-100' && (link.linkNumber < 51 || link.linkNumber > 100)) return false;
+      if (batchRange === '101-150' && (link.linkNumber < 101 || link.linkNumber > 150)) return false;
+      if (batchRange === '151-200' && (link.linkNumber < 151 || link.linkNumber > 200)) return false;
 
-    if (!matchesSearch) return false;
+      // Search match
+      const matchesSearch = 
+        link.memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        link.memberUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (link.caption && link.caption.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (link.badgeTitle && link.badgeTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        link.linkNumber.toString().includes(searchQuery);
 
-    const isSupported = supportedSet.has(link.id);
+      if (!matchesSearch) return false;
 
-    if (filter === 'pending') {
-      return !isSupported && !isOwn;
-    }
-    if (filter === 'supported') {
-      return isSupported;
-    }
-    if (filter === 'batch') {
-      return link.category === 'batch' || (!link.category && link.linkNumber >= 101 && link.linkNumber <= 123);
-    }
-    if (filter === 'vip') {
-      return link.category === 'vip';
-    }
-    if (filter === 'admin') {
-      return link.category === 'admin';
-    }
-    return true;
-  });
+      // Calculate effective support state with optimistic overrides
+      const isSupported = optimisticStatus[link.id] !== undefined
+        ? optimisticStatus[link.id]
+        : supportedSet.has(link.id);
 
+      if (filter === 'pending') {
+        return !isSupported && !isOwn;
+      }
+      if (filter === 'supported') {
+        return isSupported;
+      }
+      if (filter === 'batch') {
+        return link.category === 'batch' || (!link.category && link.linkNumber >= 101 && link.linkNumber <= 123);
+      }
+      if (filter === 'vip') {
+        return link.category === 'vip';
+      }
+      if (filter === 'admin') {
+        return link.category === 'admin';
+      }
+      return true;
+    });
+  }, [dailyLinks, currentUser, batchRange, searchQuery, optimisticStatus, supportedSet, filter]);
+
+  // Paginated/Lazy slice of links to render smoothly
+  const displayedLinks = useMemo(() => {
+    return eligibleLinks.slice(0, visibleCount);
+  }, [eligibleLinks, visibleCount]);
+
+  const hasMore = visibleCount < eligibleLinks.length;
+
+  // IntersectionObserver for seamless infinite scrolling
+  useEffect(() => {
+    if (!hasMore) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount(prev => Math.min(prev + PAGE_SIZE, eligibleLinks.length));
+        }
+      },
+      { rootMargin: '250px' }
+    );
+
+    const target = sentinelRef.current;
+    if (target) observer.observe(target);
+
+    return () => {
+      if (target) observer.unobserve(target);
+    };
+  }, [hasMore, eligibleLinks.length]);
+
+  // Instant Optimistic Support Handler (0ms UI lag)
   const handleMarkSupport = (linkId: string) => {
-    const res = markLinkSupported(linkId);
-    if (res.success && stats && stats.pendingCount === 1) {
-      // Last support completed! Fire celebration
+    // 1. Instant UI update in the current animation frame
+    setOptimisticStatus(prev => ({ ...prev, [linkId]: true }));
+
+    // Optional subtle haptic pulse for mobile touch confirmation
+    try {
+      if ('vibrate' in navigator) navigator.vibrate(25);
+    } catch {}
+
+    // Check if celebration trigger
+    const effectivePending = (stats?.pendingCount ?? 1) - 1;
+    if (effectivePending <= 0) {
       confetti({
         particleCount: 80,
         spread: 80,
         origin: { y: 0.6 }
       });
     }
+
+    // 2. Background async persistence without blocking the UI thread
+    setTimeout(() => {
+      markLinkSupported(linkId);
+    }, 0);
   };
+
+  const handleUnmarkSupport = (linkId: string) => {
+    setOptimisticStatus(prev => ({ ...prev, [linkId]: false }));
+    setTimeout(() => {
+      unmarkLinkSupported(linkId);
+    }, 0);
+  };
+
+  // Optimistic calculation for header tracker bar
+  const optimisticPendingAdjustment = useMemo(() => {
+    return Object.entries(optimisticStatus).reduce((acc, [id, val]) => {
+      const originallySupported = supportedSet.has(id);
+      if (val && !originallySupported) return acc + 1;
+      if (!val && originallySupported) return acc - 1;
+      return acc;
+    }, 0);
+  }, [optimisticStatus, supportedSet]);
+
+  const effectiveCompletedCount = Math.max(0, (stats?.completedCount ?? 0) + optimisticPendingAdjustment);
+  const effectivePendingCount = Math.max(0, (stats?.pendingCount ?? 0) - optimisticPendingAdjustment);
+  const effectiveProgressPercent = (stats?.requiredCount && stats.requiredCount > 0)
+    ? Math.min(100, Math.round((effectiveCompletedCount / stats.requiredCount) * 100))
+    : 0;
+
+  // Render YouTube Style Player Session UI if selected
+  if (viewMode === 'youtube_player') {
+    return (
+      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setViewMode('grid')}
+            className="px-3.5 py-1.5 bg-[#141418] hover:bg-[#1E1E24] border border-[#24242E] text-gray-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
+            <span>← কার্ড গ্রিড ভিউতে ফিরুন</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 font-medium">YouTube Style Support Session • Full Queue</span>
+          </div>
+        </div>
+
+        <YouTubeStyleSupportSession
+          initialLinkId={selectedPlayerLinkId}
+          onClose={() => setViewMode('grid')}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6">
@@ -114,28 +238,41 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
             </span>
           </div>
           <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            Exchange genuine reactions and comments on Facebook to maintain high community reach.
+            Exchange genuine reactions and comments on Facebook. Native intent click opens Facebook app instantly!
           </p>
         </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowTurboRunner(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs sm:text-sm font-extrabold rounded-lg flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-transform active:scale-95 animate-pulse"
-            >
-              <Zap className="w-4 h-4 fill-black" />
-              <span>⚡ টার্বো ফাস্ট সাপোর্ট (১ ক্লিকে)</span>
-            </button>
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          {/* YouTube Style Player Mode Launch Button */}
+          <button
+            onClick={() => {
+              setSelectedPlayerLinkId(undefined);
+              setViewMode('youtube_player');
+            }}
+            className="px-3.5 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs sm:text-sm font-extrabold rounded-lg flex items-center gap-1.5 shadow-lg shadow-red-600/25 transition-transform active:scale-95"
+            title="ইউটিউব ভিডিও + প্লেলিস্ট ইন্টারফেসে সাপোর্ট সেশন শুরু করুন"
+          >
+            <Play className="w-4 h-4 fill-white" />
+            <span>🎬 প্লেয়ার মোড (YouTube)</span>
+          </button>
 
-            {currentUser && !stats?.hasSubmittedToday ? (
-              <button
-                onClick={() => setShowSubmitModal(true)}
-                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-transform active:scale-95"
-              >
-                <PlusCircle className="w-4 h-4" />
-                Submit Your Link
-              </button>
-            ) : (
+          <button
+            onClick={() => setShowTurboRunner(true)}
+            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs sm:text-sm font-extrabold rounded-lg flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-transform active:scale-95"
+          >
+            <Zap className="w-4 h-4 fill-black" />
+            <span>⚡ টার্বো ফাস্ট</span>
+          </button>
+
+          {currentUser && !stats?.hasSubmittedToday ? (
+            <button
+              onClick={() => setShowSubmitModal(true)}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-transform active:scale-95"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Submit Your Link
+            </button>
+          ) : (
             <div className="text-xs px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 rounded-lg font-semibold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-green-500" />
               Your Link #{stats?.submittedLink?.linkNumber} is Active
@@ -147,7 +284,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       {/* Top Banner Sponsor */}
       <SponsoredBanner position="top_banner" />
 
-      {/* Support Status Tracker Bar for Current User */}
+      {/* Support Status Tracker Bar for Current User with Instant Optimistic Progress */}
       {currentUser && stats && (
         <div className="p-4 sm:p-5 rounded-2xl bg-[#131315] border border-[#1E1E20] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="w-full sm:w-auto text-left">
@@ -155,11 +292,11 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
               Your Daily Support Status
             </div>
             <div className="text-lg font-bold text-white mt-0.5 flex items-center gap-2">
-              <span>{stats.completedCount} of {stats.requiredCount} Supported</span>
-              <span className={`text-xs px-2 py-0.5 rounded-md font-bold ${
-                stats.pendingCount === 0 ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+              <span>{effectiveCompletedCount} of {stats.requiredCount} Supported</span>
+              <span className={`text-xs px-2 py-0.5 rounded-md font-bold transition-colors ${
+                effectivePendingCount === 0 ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
               }`}>
-                {stats.progressPercentage}%
+                {effectiveProgressPercent}%
               </span>
             </div>
           </div>
@@ -167,16 +304,16 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
           <div className="flex-1 w-full max-w-md hidden md:block">
             <div className="w-full bg-[#0A0A0B] rounded-full h-2.5 overflow-hidden border border-[#1E1E20]">
               <div
-                className="bg-indigo-500 h-full rounded-full transition-all duration-300"
-                style={{ width: `${stats.progressPercentage}%` }}
+                className="bg-gradient-to-r from-indigo-500 to-green-500 h-full rounded-full transition-all duration-300"
+                style={{ width: `${effectiveProgressPercent}%` }}
               />
             </div>
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            {stats.pendingCount > 0 ? (
+            {effectivePendingCount > 0 ? (
               <span className="text-xs font-bold text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-lg border border-amber-500/20">
-                {stats.pendingCount} links remaining
+                {effectivePendingCount} links remaining
               </span>
             ) : (
               <span className="text-xs font-bold text-green-400 bg-green-500/10 px-3 py-1.5 rounded-lg border border-green-500/20 flex items-center gap-1">
@@ -186,6 +323,37 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
           </div>
         </div>
       )}
+
+      {/* Batch Jump Selector & Performance Notice */}
+      <div className="bg-[#131315] border border-[#1E1E20] rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 text-gray-400">
+          <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
+          <span className="font-semibold text-white">গ্রুপ ব্যাচ নেভিগেশন (দ্রুত জাম্প):</span>
+          <span className="text-gray-500 hidden sm:inline">একসাথে সব না লোড করে দ্রুত লোড হচ্ছে</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+          {[
+            { id: 'all', label: 'সব লিংক' },
+            { id: '1-50', label: '#1-50 ব্যাচ' },
+            { id: '51-100', label: '#51-100 ব্যাচ' },
+            { id: '101-150', label: '#101-150 ব্যাচ' },
+            { id: '151-200', label: '#151-200 ব্যাচ' },
+          ].map(b => (
+            <button
+              key={b.id}
+              onClick={() => setBatchRange(b.id as any)}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap transition-colors ${
+                batchRange === b.id
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-[#1C1C20] text-gray-400 hover:text-white hover:bg-[#25252A]'
+              }`}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Filters & Search */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
@@ -239,7 +407,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
-            Pending ({stats?.pendingCount ?? 0})
+            Pending ({effectivePendingCount})
           </button>
           <button
             onClick={() => setFilter('supported')}
@@ -249,7 +417,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                 : 'text-gray-400 hover:text-gray-200'
             }`}
           >
-            Supported ({stats?.completedCount ?? 0})
+            Supported ({effectiveCompletedCount})
           </button>
         </div>
 
@@ -266,20 +434,41 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
         </div>
       </div>
 
-      {/* Daily Link Cards Grid */}
+      {/* Render Counter Bar */}
+      <div className="flex items-center justify-between text-xs text-gray-400 px-1">
+        <span>
+          দেখাচ্ছে <strong className="text-white">{displayedLinks.length}</strong> / {eligibleLinks.length} টি লিংক
+          {eligibleLinks.length > displayedLinks.length && ' (স্মুথ পারফরম্যান্সের জন্য ২০টি করে লোড হচ্ছে)'}
+        </span>
+        {hasMore && (
+          <button 
+            onClick={() => setVisibleCount(eligibleLinks.length)}
+            className="text-indigo-400 hover:text-indigo-300 font-semibold underline text-[11px]"
+          >
+            একসাথে সবগুলো ({eligibleLinks.length}) লোড করুন
+          </button>
+        )}
+      </div>
+
+      {/* Daily Link Cards Grid (Lazy-Loaded / Paginated) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {eligibleLinks.map(link => {
+        {displayedLinks.map(link => {
           const isOwnLink = currentUser ? link.memberId === currentUser.id : false;
-          const isSupported = supportedSet.has(link.id);
+          // Calculate instant effective support state
+          const isSupported = optimisticStatus[link.id] !== undefined
+            ? optimisticStatus[link.id]
+            : supportedSet.has(link.id);
+
+          const directFbUrl = cleanAndFormatFacebookUrl(link.postUrl, 'm');
 
           return (
             <div
               key={link.id}
-              className={`rounded-2xl border transition-all flex flex-col justify-between overflow-hidden shadow-xs ${
+              className={`rounded-2xl border transition-all duration-150 flex flex-col justify-between overflow-hidden shadow-xs ${
                 isOwnLink
                   ? 'bg-indigo-500/5 border-indigo-500/30'
                   : isSupported
-                  ? 'bg-green-500/5 border-green-500/20'
+                  ? 'bg-green-500/5 border-green-500/30 ring-1 ring-green-500/20'
                   : 'bg-[#131315] border-[#1E1E20] hover:border-indigo-500/40'
               }`}
             >
@@ -312,7 +501,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                       #{link.linkNumber}
                     </div>
                     <div className="text-[10px] text-gray-500 mt-0.5">
-                      {link.supportCount} supports
+                      {link.supportCount + (optimisticStatus[link.id] && !supportedSet.has(link.id) ? 1 : 0)} supports
                     </div>
                   </div>
                 </div>
@@ -348,11 +537,11 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                 {/* Status Indicator Badge */}
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span className="text-gray-500 text-[11px]">Support Status:</span>
-                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full transition-all duration-200 ${
                     isOwnLink 
                       ? 'bg-[#1E1E20] text-gray-400'
                       : isSupported 
-                      ? 'bg-green-500/10 text-green-400 border border-green-500/20' 
+                      ? 'bg-green-500/20 text-green-300 border border-green-500/30 scale-105' 
                       : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                   }`}>
                     {isOwnLink ? 'Your Own Link' : isSupported ? '✓ Supported' : '○ Pending'}
@@ -360,48 +549,65 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                 </div>
               </div>
 
-              {/* Card Footer Actions */}
+              {/* Card Footer Actions - Direct native <a> tag for native OS intent handling & App swipe */}
               <div className="p-3 sm:px-4 sm:py-3 bg-[#0E0E10] border-t border-[#1E1E20] flex items-center justify-between gap-2">
                 
-                <button
-                  onClick={() => setSelectedPostForInAppView(link)}
-                  className="flex-1 py-2 px-3 bg-indigo-600/10 hover:bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Eye className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>সাইটেই পোস্ট দেখুন</span>
-                </button>
-
+                {/* Direct Native Anchor - triggers native Facebook app or mobile browser reliably */}
                 <a
-                  href={cleanAndFormatFacebookUrl(link.postUrl, 'm')}
+                  href={directFbUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title="Directly open on m.facebook in new tab"
-                  className="p-2 bg-[#1E1E20] hover:bg-[#252528] border border-[#2A2A2D] text-gray-300 hover:text-white text-xs font-bold rounded-lg flex items-center justify-center transition-colors"
+                  className="flex-1 py-2 px-3 bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 hover:text-blue-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors active:scale-95"
+                  title="সরাসরি ফেসবুক অ্যাপ বা ব্রাউজারে খুলুন (Swipe friendly)"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                  <span>ফেসবুকে খুলুন</span>
                 </a>
 
+                {/* Play in YouTube Player Session */}
+                <button
+                  onClick={() => {
+                    setSelectedPlayerLinkId(link.id);
+                    setViewMode('youtube_player');
+                  }}
+                  title="ইউটিউব স্টাইল প্লেয়ার সেশনে এই লিংকটি ওপেন করুন"
+                  className="p-2 bg-red-600/15 hover:bg-red-600/25 border border-red-500/30 text-red-300 hover:text-white text-xs font-bold rounded-lg flex items-center justify-center transition-colors"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                </button>
+
+                {/* Optional In-app preview */}
+                <button
+                  onClick={() => setSelectedPostForInAppView(link)}
+                  title="অ্যাপের ভেতরেই প্রিভিউ দেখুন"
+                  className="p-2 bg-[#1E1E20] hover:bg-[#252528] border border-[#2A2A2D] text-gray-300 hover:text-white text-xs font-bold rounded-lg flex items-center justify-center transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                </button>
+
+                {/* Instant Optimistic Mark / Unmark Support Button */}
                 {!isOwnLink ? (
                   <button
                     onClick={() => {
                       if (isSupported) {
-                        unmarkLinkSupported(link.id);
+                        handleUnmarkSupport(link.id);
                       } else {
                         handleMarkSupport(link.id);
                       }
                     }}
-                    className={`py-2 px-3.5 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                    className={`py-2 px-3.5 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 shadow-xs ${
                       isSupported
-                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white active:scale-95 shadow-lg shadow-indigo-600/20'
+                        ? 'bg-green-600 hover:bg-green-700 text-white ring-1 ring-green-400/40'
+                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
                     }`}
                   >
                     {isSupported ? (
                       <>
-                        <Check className="w-3.5 h-3.5" /> Supported
+                        <Check className="w-3.5 h-3.5 text-white" />
+                        <span>Supported</span>
                       </>
                     ) : (
-                      'Mark Support'
+                      <span>Mark Support</span>
                     )}
                   </button>
                 ) : (
@@ -420,6 +626,31 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
           );
         })}
       </div>
+
+      {/* Sentinel & Lazy Load More Buttons */}
+      {hasMore && (
+        <div ref={sentinelRef} className="py-6 flex flex-col items-center justify-center gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setVisibleCount(prev => Math.min(prev + PAGE_SIZE, eligibleLinks.length))}
+              className="px-6 py-2.5 bg-[#18181C] hover:bg-[#202026] border border-[#26262D] hover:border-indigo-500/50 text-white font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition-all active:scale-95 shadow-md"
+            >
+              <span>আরো ২০টি লিংক লোড করুন (বাকি {eligibleLinks.length - displayedLinks.length}টি)</span>
+              <ChevronDown className="w-4 h-4 text-indigo-400" />
+            </button>
+
+            <button
+              onClick={() => setVisibleCount(eligibleLinks.length)}
+              className="px-4 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 font-bold text-xs sm:text-sm rounded-xl transition-all"
+            >
+              সবগুলো লোড করুন
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-500">
+            স্ক্রোল করলেই স্বয়ংক্রিয়ভাবে পরবর্তী ২০টি কার্ড চলে আসবে
+          </p>
+        </div>
+      )}
 
       {eligibleLinks.length === 0 && (
         <div className="p-8 text-center bg-[#131315] rounded-2xl border border-[#1E1E20]">

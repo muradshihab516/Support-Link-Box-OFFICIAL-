@@ -55,15 +55,18 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
   const [copiedComment, setCopiedComment] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [embedError, setEmbedError] = useState(false);
+  const [optimisticSupported, setOptimisticSupported] = useState<boolean | null>(null);
 
   useEffect(() => {
     setEmbedError(false);
+    setOptimisticSupported(null);
   }, [currentLink?.id]);
 
   if (!isOpen || !currentLink) return null;
 
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
-  const isSupported = stats?.supportedLinkIds.has(currentLink.id) ?? false;
+  const isOriginallySupported = stats?.supportedLinkIds.has(currentLink.id) ?? false;
+  const isSupported = optimisticSupported !== null ? optimisticSupported : isOriginallySupported;
   const isOwnLink = currentUser ? currentLink.memberId === currentUser.id : false;
 
   const currentIndex = allLinks.findIndex(l => l.id === currentLink.id);
@@ -84,16 +87,25 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
 
   const handleToggleSupport = () => {
     if (isSupported) {
-      unmarkLinkSupported(currentLink.id);
+      setOptimisticSupported(false);
+      setTimeout(() => {
+        unmarkLinkSupported(currentLink.id);
+      }, 0);
     } else {
-      const res = markLinkSupported(currentLink.id);
-      if (res.success) {
-        confetti({
-          particleCount: 60,
-          spread: 70,
-          origin: { y: 0.7 }
-        });
-      }
+      setOptimisticSupported(true);
+      try {
+        if ('vibrate' in navigator) navigator.vibrate(25);
+      } catch {}
+
+      confetti({
+        particleCount: 60,
+        spread: 70,
+        origin: { y: 0.7 }
+      });
+
+      setTimeout(() => {
+        markLinkSupported(currentLink.id);
+      }, 0);
     }
   };
 
@@ -107,10 +119,6 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
     navigator.clipboard.writeText(currentLink.postUrl);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
-  };
-
-  const handleOpenFacebook = () => {
-    window.open(currentLink.postUrl, '_blank', 'noopener,noreferrer');
   };
 
   // Safe Facebook Embed URL
@@ -195,13 +203,15 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={handleOpenFacebook}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-md shadow-blue-600/20"
+            <a
+              href={currentLink.postUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-md shadow-blue-600/20 active:scale-95"
             >
-              <span>Open in Facebook App</span>
+              <span>ফেসবুক অ্যাপে খুলুন</span>
               <ExternalLink className="w-3.5 h-3.5" />
-            </button>
+            </a>
           </div>
 
           {/* Embedded Post Preview Container */}
@@ -247,13 +257,15 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
                   {currentLink.postUrl}
                 </div>
                 <div className="flex items-center justify-center gap-2 pt-1">
-                  <button
-                    onClick={handleOpenFacebook}
+                  <a
+                    href={currentLink.postUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-lg shadow-blue-600/25 transition-transform active:scale-95"
                   >
                     <ExternalLink className="w-4 h-4" />
                     ফেসবুকে সরাসরি পোস্টটি খুলুন
-                  </button>
+                  </a>
                 </div>
               </div>
             </div>

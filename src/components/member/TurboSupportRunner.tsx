@@ -59,6 +59,7 @@ export const TurboSupportRunner: React.FC<TurboSupportRunnerProps> = ({
   const [secondsOnSite, setSecondsOnSite] = useState(0);
   const [autoNext, setAutoNext] = useState(true);
   const [openMode, setOpenMode] = useState<'m' | 'mbasic' | 'www'>('m');
+  const [optimisticSupportedIds, setOptimisticSupportedIds] = useState<Record<string, boolean>>({});
 
   // Track session duration (Time on Site for Ad revenue)
   useEffect(() => {
@@ -79,18 +80,15 @@ export const TurboSupportRunner: React.FC<TurboSupportRunnerProps> = ({
 
   const currentLink = allLinks[currentIndex] || allLinks[0];
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
-  const isSupported = stats?.supportedLinkIds.has(currentLink.id) ?? false;
+  const isOriginallySupported = stats?.supportedLinkIds.has(currentLink.id) ?? false;
+  const isSupported = optimisticSupportedIds[currentLink.id] !== undefined 
+    ? optimisticSupportedIds[currentLink.id] 
+    : isOriginallySupported;
   const isOwnLink = currentUser ? currentLink.memberId === currentUser.id : false;
 
   const totalEligible = allLinks.length;
-  const supportedCount = stats?.completedCount || 0;
+  const supportedCount = (stats?.completedCount || 0) + Object.keys(optimisticSupportedIds).filter(id => !stats?.supportedLinkIds.has(id)).length;
   const progressPercent = totalEligible > 0 ? Math.round((supportedCount / totalEligible) * 100) : 0;
-
-  const handleOpenPost = (overrideMode?: 'm' | 'mbasic' | 'www') => {
-    const targetMode = overrideMode || openMode;
-    const fastUrl = cleanAndFormatFacebookUrl(currentLink.postUrl, targetMode);
-    window.open(fastUrl, '_blank', 'noopener,noreferrer');
-  };
 
   const handleCopyLink = () => {
     const cleanUrl = cleanAndFormatFacebookUrl(currentLink.postUrl, openMode);
@@ -107,14 +105,23 @@ export const TurboSupportRunner: React.FC<TurboSupportRunnerProps> = ({
 
   const handleMarkAndNext = () => {
     if (!isSupported && !isOwnLink) {
-      const res = markLinkSupported(currentLink.id);
-      if (res.success) {
-        confetti({
-          particleCount: 50,
-          spread: 60,
-          origin: { y: 0.8 }
-        });
-      }
+      // 1. Instant optimistic update
+      setOptimisticSupportedIds(prev => ({ ...prev, [currentLink.id]: true }));
+
+      try {
+        if ('vibrate' in navigator) navigator.vibrate(25);
+      } catch {}
+
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.8 }
+      });
+
+      // 2. Background async write
+      setTimeout(() => {
+        markLinkSupported(currentLink.id);
+      }, 0);
     }
 
     if (autoNext && currentIndex < allLinks.length - 1) {
@@ -288,15 +295,17 @@ export const TurboSupportRunner: React.FC<TurboSupportRunnerProps> = ({
               </div>
             </div>
 
-            {/* Big Launch Button */}
+            {/* Big Launch Button - Native anchor for reliable mobile app intent and swipe navigation */}
             <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => handleOpenPost()}
+              <a
+                href={cleanAndFormatFacebookUrl(currentLink.postUrl, openMode)}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-600/25 transition-transform active:scale-95 shrink-0"
               >
-                <span>{openMode === 'mbasic' ? '⚡ mbasic-এ পোস্ট খুলুন' : '🌐 m.facebook-এ পোস্ট খুলুন'}</span>
+                <span>{openMode === 'mbasic' ? '⚡ mbasic-এ পোস্ট খুলুন' : '🌐 ফেসবুক অ্যাপ/ব্রাউজারে খুলুন'}</span>
                 <ExternalLink className="w-4 h-4" />
-              </button>
+              </a>
             </div>
           </div>
 

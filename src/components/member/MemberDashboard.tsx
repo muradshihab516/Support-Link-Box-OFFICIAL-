@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   ChevronRight,
   TrendingUp,
-  Eye
+  Eye,
+  Play
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
@@ -184,12 +185,21 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                <button
+                  onClick={() => onNavigate('support_session')}
+                  className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-lg font-extrabold text-xs transition-all shadow-lg shadow-red-600/25 flex items-center gap-1.5 active:scale-95"
+                  title="ইউটিউব স্টাইল সাপোর্ট প্লেয়ার সেশন শুরু করুন"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                  <span>প্লেয়ার সেশন (YouTube)</span>
+                </button>
+
                 <button
                   onClick={() => onNavigate('daily_links')}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-1.5"
+                  className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs transition-all shadow-lg shadow-indigo-600/20 flex items-center gap-1.5 active:scale-95"
                 >
-                  <span>{stats.pendingCount > 0 ? 'Continue Supporting' : 'View Feed'}</span>
+                  <span>{stats.pendingCount > 0 ? 'সব লিংক' : 'View Feed'}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>

@@ -23,15 +23,17 @@ export const SponsoredBanner: React.FC<SponsoredBannerProps> = ({ position, clas
     trackSponsorImpression(sponsor.id);
   }, [sponsor.id]);
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
     trackSponsorClick(sponsor.id);
-    window.open(sponsor.destinationUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <div 
+    <a 
+      href={sponsor.destinationUrl}
+      target="_blank"
+      rel="noopener noreferrer"
       onClick={handleClick}
-      className={`group cursor-pointer overflow-hidden rounded-2xl border border-[#1E1E20] bg-gradient-to-r from-[#18181B] via-[#131315] to-[#0E0E10] text-white p-3.5 sm:p-4 shadow-sm hover:border-indigo-500/50 transition-all duration-200 ${className}`}
+      className={`group block overflow-hidden rounded-2xl border border-[#1E1E20] bg-gradient-to-r from-[#18181B] via-[#131315] to-[#0E0E10] text-white p-3.5 sm:p-4 shadow-sm hover:border-indigo-500/50 transition-all duration-200 ${className}`}
     >
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-3.5 w-full sm:w-auto">
@@ -60,14 +62,14 @@ export const SponsoredBanner: React.FC<SponsoredBannerProps> = ({ position, clas
           </div>
         </div>
 
-        <button 
+        <div 
           className="w-full sm:w-auto px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 shrink-0 transition-colors shadow-xs"
         >
           <span>Visit Sponsor</span>
           <ExternalLink className="w-3.5 h-3.5" />
-        </button>
+        </div>
       </div>
-    </div>
+    </a>
   );
 };
 
@@ -85,13 +87,15 @@ export const FeaturedSponsorCard: React.FC = () => {
 
   const handleClick = () => {
     trackSponsorClick(featured.id);
-    window.open(featured.destinationUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <div 
+    <a 
+      href={featured.destinationUrl}
+      target="_blank"
+      rel="noopener noreferrer"
       onClick={handleClick}
-      className="cursor-pointer rounded-2xl border border-amber-500/20 bg-[#131315] p-4 relative overflow-hidden group hover:border-amber-500/40 transition-all"
+      className="block rounded-2xl border border-amber-500/20 bg-[#131315] p-4 relative overflow-hidden group hover:border-amber-500/40 transition-all"
     >
       <div className="flex items-center justify-between mb-2">
         <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
@@ -113,6 +117,6 @@ export const FeaturedSponsorCard: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
+    </a>
   );
 };

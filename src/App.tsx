@@ -7,6 +7,7 @@ import { MemberDashboard } from './components/member/MemberDashboard';
 import { DailyLinksView } from './components/member/DailyLinksView';
 import { LeaderboardView } from './components/member/LeaderboardView';
 import { MemberProfileView } from './components/member/MemberProfileView';
+import { YouTubeStyleSupportSession } from './components/member/YouTubeStyleSupportSession';
 import { FreeToolsHub } from './components/tools/FreeToolsHub';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
@@ -52,6 +53,15 @@ const AppContent: React.FC = () => {
             onSubmitLink={() => setIsSubmitModalOpen(true)}
             onOpenReport={handleOpenReport}
           />
+        );
+      case 'support_session':
+      case 'youtube_player':
+        return (
+          <div className="py-2 sm:py-4">
+            <YouTubeStyleSupportSession
+              onClose={() => setCurrentView('daily_links')}
+            />
+          </div>
         );
       case 'leaderboard':
         return (

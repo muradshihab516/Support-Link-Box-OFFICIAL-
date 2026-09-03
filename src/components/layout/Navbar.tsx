@@ -17,7 +17,8 @@ import {
   Layers,
   Wrench,
   Trophy,
-  LayoutDashboard
+  LayoutDashboard,
+  Play
 } from 'lucide-react';
 import { AuthModal } from '../auth/AuthModal';
 
@@ -162,6 +163,19 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
               >
                 <Flame className="w-4 h-4 text-orange-500" />
                 Today's Links
+              </button>
+
+              <button
+                onClick={() => onNavigate('support_session')}
+                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 ${
+                  currentView === 'support_session' || currentView === 'youtube_player'
+                    ? 'text-red-400 bg-red-600/15 border border-red-500/30'
+                    : 'text-gray-400 hover:text-white hover:bg-[#1E1E20]'
+                }`}
+                title="ইউটিউব স্টাইল সাপোর্ট সেশন (প্লেয়ার ভিউ)"
+              >
+                <Play className="w-3.5 h-3.5 text-red-500 fill-current" />
+                <span>Player Session</span>
               </button>
 
               <button
