@@ -23,13 +23,12 @@ import {
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
-import { TurboSupportRunner } from './TurboSupportRunner';
-import { YouTubeStyleSupportSession } from './YouTubeStyleSupportSession';
+import { PlaylistSupportSession } from './PlaylistSupportSession';
 import { ReportModal } from './ReportModal';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
 import { DisplayAdSlot } from '../monetization/DisplayAdSlot';
 import confetti from 'canvas-confetti';
-import { cleanAndFormatFacebookUrl } from '../../utils/facebookLinks';
+import { cleanAndFormatFacebookUrl, getFacebookAppUrl, getFacebookWebBrowserUrl } from '../../utils/facebookLinks';
 
 interface DailyLinksViewProps {
   onNavigate?: (view: string) => void;
@@ -43,6 +42,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const { 
     currentUser, 
     dailyLinks, 
+    reports,
     getTodaySupportStats, 
     markLinkSupported, 
     unmarkLinkSupported 
@@ -51,15 +51,14 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const [filter, setFilter] = useState<'all' | 'batch' | 'vip' | 'admin' | 'pending' | 'supported'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [showTurboRunner, setShowTurboRunner] = useState(false);
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
-  const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string } | null>(null);
+  const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string; number?: number; memberId?: string; url?: string } | null>(null);
 
   // Optimistic UI state for instant checkmark feedback
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, boolean>>({});
 
-  // View Mode: Regular Card Grid vs YouTube Playlist Player Session
-  const [viewMode, setViewMode] = useState<'grid' | 'youtube_player'>('grid');
+  // View Mode: Playlist Support Session (Default) vs Card Grid
+  const [viewMode, setViewMode] = useState<'playlist' | 'grid'>('playlist');
   const [selectedPlayerLinkId, setSelectedPlayerLinkId] = useState<string | undefined>(undefined);
 
   // Pagination & Lazy-load state
@@ -196,25 +195,25 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
     ? Math.min(100, Math.round((effectiveCompletedCount / stats.requiredCount) * 100))
     : 0;
 
-  // Render YouTube Style Player Session UI if selected
-  if (viewMode === 'youtube_player') {
+  // Render Playlist Support Session UI if selected
+  if (viewMode === 'playlist') {
     return (
-      <div className="max-w-7xl mx-auto px-2 sm:px-4 py-3 sm:py-6 space-y-4">
+      <div className="max-w-6xl mx-auto px-2 sm:px-4 py-3 sm:py-5 space-y-3">
         <div className="flex items-center justify-between">
           <button
             onClick={() => setViewMode('grid')}
             className="px-3.5 py-1.5 bg-[#141418] hover:bg-[#1E1E24] border border-[#24242E] text-gray-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
           >
             <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
-            <span>← কার্ড গ্রিড ভিউতে ফিরুন</span>
+            <span>← কার্ড গ্রিড ভিউতে দেখুন</span>
           </button>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 font-medium">YouTube Style Support Session • Full Queue</span>
+            <span className="text-xs text-gray-400 font-medium">সাপোর্ট সেশন (প্লেলিস্ট মোড)</span>
           </div>
         </div>
 
-        <YouTubeStyleSupportSession
+        <PlaylistSupportSession
           initialLinkId={selectedPlayerLinkId}
           onClose={() => setViewMode('grid')}
         />
@@ -243,25 +242,17 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          {/* YouTube Style Player Mode Launch Button */}
+          {/* Playlist Support Session Launch Button */}
           <button
             onClick={() => {
               setSelectedPlayerLinkId(undefined);
-              setViewMode('youtube_player');
+              setViewMode('playlist');
             }}
-            className="px-3.5 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs sm:text-sm font-extrabold rounded-lg flex items-center gap-1.5 shadow-lg shadow-red-600/25 transition-transform active:scale-95"
-            title="ইউটিউব ভিডিও + প্লেলিস্ট ইন্টারফেসে সাপোর্ট সেশন শুরু করুন"
+            className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 hover:from-indigo-500 hover:to-blue-500 text-white text-xs sm:text-sm font-extrabold rounded-xl flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition-transform active:scale-95"
+            title="প্লেলিস্ট আকারে দ্রুত সাপোর্ট সেশন শুরু করুন"
           >
             <Play className="w-4 h-4 fill-white" />
-            <span>🎬 প্লেয়ার মোড (YouTube)</span>
-          </button>
-
-          <button
-            onClick={() => setShowTurboRunner(true)}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs sm:text-sm font-extrabold rounded-lg flex items-center gap-1.5 shadow-lg shadow-amber-500/20 transition-transform active:scale-95"
-          >
-            <Zap className="w-4 h-4 fill-black" />
-            <span>⚡ টার্বো ফাস্ট</span>
+            <span>▶ প্লেলিস্ট সাপোর্ট সেশন</span>
           </button>
 
           {currentUser && !stats?.hasSubmittedToday ? (
@@ -552,26 +543,37 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
               {/* Card Footer Actions - Direct native <a> tag for native OS intent handling & App swipe */}
               <div className="p-3 sm:px-4 sm:py-3 bg-[#0E0E10] border-t border-[#1E1E20] flex items-center justify-between gap-2">
                 
-                {/* Direct Native Anchor - triggers native Facebook app or mobile browser reliably */}
+                {/* Native App Link */}
                 <a
-                  href={directFbUrl}
+                  href={getFacebookAppUrl(link.postUrl)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 py-2 px-3 bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 hover:text-blue-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors active:scale-95"
-                  title="সরাসরি ফেসবুক অ্যাপ বা ব্রাউজারে খুলুন (Swipe friendly)"
+                  className="flex-1 py-2 px-2.5 bg-blue-600/15 hover:bg-blue-600/25 border border-blue-500/30 text-blue-300 hover:text-blue-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1 transition-colors active:scale-95"
+                  title="সরাসরি ফেসবুক অ্যাপে খুলুন"
                 >
-                  <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-                  <span>ফেসবুকে খুলুন</span>
+                  <ExternalLink className="w-3 h-3 text-blue-400" />
+                  <span>📱 অ্যাপ</span>
                 </a>
 
-                {/* Play in YouTube Player Session */}
+                {/* Safe Web Browser Link (mbasic - stops app redirect) */}
+                <a
+                  href={getFacebookWebBrowserUrl(link.postUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="py-2 px-2.5 bg-indigo-600/15 hover:bg-indigo-600/25 border border-indigo-500/30 text-indigo-300 hover:text-indigo-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1 transition-colors active:scale-95"
+                  title="কোনো অ্যাপ ওপেন না হয়ে সরাসরি ব্রাউজারে চলবে"
+                >
+                  <span>🌐 ব্রাউজার</span>
+                </a>
+
+                {/* Open in Playlist Support Session */}
                 <button
                   onClick={() => {
                     setSelectedPlayerLinkId(link.id);
-                    setViewMode('youtube_player');
+                    setViewMode('playlist');
                   }}
-                  title="ইউটিউব স্টাইল প্লেয়ার সেশনে এই লিংকটি ওপেন করুন"
-                  className="p-2 bg-red-600/15 hover:bg-red-600/25 border border-red-500/30 text-red-300 hover:text-white text-xs font-bold rounded-lg flex items-center justify-center transition-colors"
+                  title="প্লেলিস্ট সেশনে ওপেন করুন"
+                  className="p-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-white text-xs font-bold rounded-lg flex items-center justify-center transition-colors"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
                 </button>
@@ -585,41 +587,58 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                   <Eye className="w-3.5 h-3.5 text-indigo-400" />
                 </button>
 
-                {/* Instant Optimistic Mark / Unmark Support Button */}
+                {/* Action Button: Peer links go to Playlist Support Session with verified return flow */}
                 {!isOwnLink ? (
                   <button
                     onClick={() => {
-                      if (isSupported) {
-                        handleUnmarkSupport(link.id);
-                      } else {
-                        handleMarkSupport(link.id);
-                      }
+                      setSelectedPlayerLinkId(link.id);
+                      setViewMode('playlist');
                     }}
                     className={`py-2 px-3.5 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all duration-150 active:scale-95 shadow-xs ${
                       isSupported
-                        ? 'bg-green-600 hover:bg-green-700 text-white ring-1 ring-green-400/40'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                        ? 'bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30'
+                        : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-lg shadow-indigo-600/20'
                     }`}
+                    title={isSupported ? 'সাপোর্ট সম্পন্ন হয়েছে (ক্লিক করে প্লেলিস্টে দেখতে পারেন)' : 'সাপোর্ট করতে প্লেলিস্টে যান'}
                   >
                     {isSupported ? (
                       <>
-                        <Check className="w-3.5 h-3.5 text-white" />
-                        <span>Supported</span>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>সাপোর্টেড</span>
                       </>
                     ) : (
-                      <span>Mark Support</span>
+                      <>
+                        <Play className="w-3 h-3 fill-current" />
+                        <span>সাপোর্ট দিন ▶</span>
+                      </>
                     )}
                   </button>
                 ) : (
-                  <span className="text-[11px] text-gray-500 px-2">Own post</span>
+                  <a
+                    href={getFacebookAppUrl(link.postUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
+                    title="নিজের লিংকটি ফেসবুক অ্যাপ বা ব্রাউজারে টেস্ট করুন"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>নিজের লিংক চেক</span>
+                  </a>
                 )}
 
                 <button
-                  onClick={() => setReportTarget({ linkId: link.id, name: link.memberName })}
-                  title="Report link issue"
-                  className="p-2 text-gray-500 hover:text-red-400 rounded-lg hover:bg-[#1E1E20] transition-colors"
+                  onClick={() => setReportTarget({ 
+                    linkId: link.id, 
+                    name: link.memberName,
+                    number: link.linkNumber,
+                    memberId: link.memberId,
+                    url: link.postUrl
+                  })}
+                  title="Report a Problem / সমস্যা রিপোর্ট"
+                  className="py-2 px-2.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/25 text-rose-300 hover:text-rose-200 text-xs font-semibold rounded-lg flex items-center gap-1 transition-colors"
                 >
-                  <Flag className="w-3.5 h-3.5" />
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                  <span className="hidden xl:inline text-[11px]">রিপোর্ট</span>
                 </button>
               </div>
             </div>
@@ -663,13 +682,6 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       {/* Mid-content Display Ad */}
       <DisplayAdSlot format="in_feed" />
 
-      {/* Turbo Fast Support Runner Modal */}
-      <TurboSupportRunner
-        isOpen={showTurboRunner}
-        onClose={() => setShowTurboRunner(false)}
-        allLinks={eligibleLinks}
-      />
-
       {/* In-App Post Viewer Modal */}
       <InAppPostViewerModal
         isOpen={Boolean(selectedPostForInAppView)}
@@ -693,6 +705,13 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
           onClose={() => setReportTarget(null)}
           targetLinkId={reportTarget.linkId}
           targetName={reportTarget.name}
+          targetMemberId={reportTarget.memberId}
+          prefilledLinkInfo={{
+            id: reportTarget.linkId,
+            number: reportTarget.number || 1,
+            member: reportTarget.name,
+            url: reportTarget.url
+          }}
         />
       )}
     </div>

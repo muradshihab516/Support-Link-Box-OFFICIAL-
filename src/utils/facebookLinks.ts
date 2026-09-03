@@ -65,3 +65,18 @@ export function openInBrowserSafely(url: string, variant: 'm' | 'mbasic' | 'www'
   const targetUrl = cleanAndFormatFacebookUrl(url, variant);
   window.open(targetUrl, '_blank', 'noopener,noreferrer');
 }
+
+/**
+ * Generates URL optimized for Facebook App
+ */
+export function getFacebookAppUrl(rawUrl: string): string {
+  return cleanAndFormatFacebookUrl(rawUrl, 'm');
+}
+
+/**
+ * Generates URL that strictly stays in Mobile Browser (prevents Facebook App from hijacking)
+ * Using mbasic.facebook.com which Android default app link filters do not intercept.
+ */
+export function getFacebookWebBrowserUrl(rawUrl: string): string {
+  return cleanAndFormatFacebookUrl(rawUrl, 'mbasic');
+}

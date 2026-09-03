@@ -18,11 +18,16 @@ import {
   ChevronRight,
   TrendingUp,
   Eye,
-  Play
+  Play,
+  AlertTriangle,
+  Edit3,
+  Image as ImageIcon,
+  CheckCircle,
+  RefreshCw
 } from 'lucide-react';
+import { getFacebookAppUrl, getFacebookWebBrowserUrl } from '../../utils/facebookLinks';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
-import { TurboSupportRunner } from './TurboSupportRunner';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
 import { DisplayAdSlot } from '../monetization/DisplayAdSlot';
 import { ReportModal } from './ReportModal';
@@ -38,15 +43,23 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
     currentUser, 
     dailyLinks, 
     notices, 
+    reports,
+    updateDailyLinkUrl,
+    resolveReportsForLink,
     getTodaySupportStats, 
     markLinkSupported,
     badges 
   } = useApp();
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
-  const [showTurboRunner, setShowTurboRunner] = useState(false);
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
   const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string } | null>(null);
+
+  // Link editing & resolution state for link owner
+  const [isEditLinkOpen, setIsEditLinkOpen] = useState(false);
+  const [editedUrl, setEditedUrl] = useState('');
+  const [editMsg, setEditMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
 
   if (!currentUser) {
     return (
@@ -72,6 +85,41 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
   const userNotices = notices.filter(n => 
     n.active && (n.targetMemberId === currentUser.id || n.targetMemberId === 'all')
   );
+
+  // User's own submitted link for today
+  const userTodayLink = dailyLinks.find(l => l.memberId === currentUser.id);
+
+  // Reports submitted against currentUser's link today (open or pending)
+  const myLinkReports = reports.filter(r => 
+    (r.targetMemberId === currentUser.id || (userTodayLink && r.targetLinkId === userTodayLink.id)) &&
+    (r.status === 'open' || r.status === 'pending')
+  );
+
+  // Handle saving corrected post URL
+  const handleSaveEditedUrl = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userTodayLink) return;
+    if (!editedUrl.trim()) {
+      setEditMsg({ type: 'error', text: 'একটি সঠিক ফেসবুক পোস্টের লিংক দিন।' });
+      return;
+    }
+    const res = updateDailyLinkUrl(userTodayLink.id, editedUrl.trim());
+    if (res.success) {
+      setEditMsg({ type: 'success', text: res.message });
+      setTimeout(() => {
+        setIsEditLinkOpen(false);
+        setEditMsg(null);
+      }, 1600);
+    } else {
+      setEditMsg({ type: 'error', text: res.message });
+    }
+  };
+
+  // Handle mark as resolved
+  const handleResolveReports = () => {
+    if (!userTodayLink) return;
+    resolveReportsForLink(userTodayLink.id);
+  };
 
   // Today's peer links preview (max 5 for dashboard)
   const peerLinks = dailyLinks.filter(l => l.memberId !== currentUser.id);
@@ -140,6 +188,175 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
         </div>
       )}
 
+      {/* 🚨 PROMINENT REPORT ALERT BANNER FOR LINK OWNER 🚨 */}
+      {myLinkReports.length > 0 && (
+        <div className="bg-gradient-to-br from-rose-950/80 via-[#200F17] to-[#141218] p-5 sm:p-7 rounded-2xl sm:rounded-3xl border-2 border-rose-500/70 shadow-2xl space-y-4 animate-in fade-in">
+          
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/50 flex items-center justify-center text-rose-400 shrink-0 mt-0.5 animate-pulse">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black uppercase tracking-wider">
+                    সতর্কতা ও জরুরি অ্যাকশন
+                  </span>
+                  {userTodayLink && (
+                    <span className="text-xs text-rose-300 font-bold">
+                      আপনার আজকের পোস্ট: লিংক #{userTodayLink.linkNumber}
+                    </span>
+                  )}
+                </div>
+
+                <h2 className="text-lg sm:text-2xl font-black text-rose-100 tracking-tight">
+                  🚨 আপনার আজকের লিংকে {myLinkReports.length} জন সমস্যা জানিয়েছে!
+                </h2>
+
+                <p className="text-xs sm:text-sm text-rose-200/90 leading-relaxed max-w-2xl">
+                  অন্যান্য সদস্যরা আপনার পোস্টে সাপোর্ট দেওয়ার চেষ্টা করেছেন কিন্তু সমস্যার কারণে দিতে পারছেন না। দ্রুত ফেসবুক পোস্টটি চেক করুন অথবা নতুন লিংক দিন।
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+              {userTodayLink && (
+                <a
+                  href={getFacebookAppUrl(userTodayLink.postUrl)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-rose-600/30 transition-all active:scale-95"
+                  title="আপনার নিজের পোস্টটি ফেসবুক অ্যাপে খুলে চেক করুন"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>নিজের পোস্ট চেক করুন</span>
+                </a>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEditedUrl(userTodayLink?.postUrl || '');
+                  setIsEditLinkOpen(!isEditLinkOpen);
+                }}
+                className="px-4 py-2.5 bg-[#2C131F] hover:bg-[#3B192A] border border-rose-500/40 text-rose-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+              >
+                <Edit3 className="w-4 h-4 text-rose-400" />
+                <span>{isEditLinkOpen ? 'বাতিল' : '✏️ লিংক পরিবর্তন করুন'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResolveReports}
+                className="px-3.5 py-2.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                title="সমস্যা সমাধান হয়ে গেলে রিপোর্ট নিষ্পত্তি করুন"
+              >
+                <CheckCircle className="w-4 h-4 text-emerald-400" />
+                <span className="hidden sm:inline">সমাধান করেছি</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Inline Edit Form if open */}
+          {isEditLinkOpen && (
+            <form onSubmit={handleSaveEditedUrl} className="p-4 bg-[#140B10] border border-rose-500/30 rounded-2xl space-y-3 animate-in fade-in">
+              <label className="block text-xs font-bold text-rose-200">
+                নতুন বা সঠিক ফেসবুক পোস্ট লিংক দিন:
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="url"
+                  required
+                  placeholder="https://facebook.com/..."
+                  value={editedUrl}
+                  onChange={e => setEditedUrl(e.target.value)}
+                  className="flex-1 px-3.5 py-2.5 text-xs bg-[#1C0E17] border border-rose-500/30 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-rose-400 font-mono"
+                />
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>লিংক আপডেট ও সেভ করুন</span>
+                </button>
+              </div>
+
+              {editMsg && (
+                <div className={`p-2.5 rounded-xl text-xs font-semibold ${
+                  editMsg.type === 'success' 
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {editMsg.text}
+                </div>
+              )}
+            </form>
+          )}
+
+          {/* List of Reported Issues */}
+          <div className="space-y-2 pt-2 border-t border-rose-500/20">
+            <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider block">
+              সদস্যদের জানানো সমস্যাসমূহ ({myLinkReports.length}টি রিপোর্ট):
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {myLinkReports.map((report) => (
+                <div 
+                  key={report.id} 
+                  className="p-3 bg-[#170C12] border border-rose-500/30 rounded-xl space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+                      {report.reporterName}
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      {report.createdAt.split('T')[0]} {report.createdAt.split('T')[1]?.substring(0, 5)}
+                    </span>
+                  </div>
+
+                  {/* Pre-defined Reasons Chips */}
+                  {report.reasons && report.reasons.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {report.reasons.map((reason, idx) => (
+                        <span 
+                          key={idx} 
+                          className="px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-rose-200 text-[11px] font-bold"
+                        >
+                          {reason}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Free-text Description if different from reasons */}
+                  {report.description && (!report.reasons || report.description !== report.reasons.join(', ')) && (
+                    <p className="text-gray-300 italic text-[11px] bg-[#0E060A] p-2 rounded-lg border border-rose-500/15">
+                      "{report.description}"
+                    </p>
+                  )}
+
+                  {/* Attached Screenshot Thumbnail */}
+                  {report.screenshotUrl && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewScreenshotUrl(report.screenshotUrl || null)}
+                        className="flex items-center gap-1.5 text-[11px] text-indigo-300 hover:text-indigo-200 bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-colors"
+                      >
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>প্রুফ স্ক্রিনশট দেখুন</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      )}
+
       {/* VERY IMPORTANT UX REQUIREMENT: TODAY'S TASK HERO CARD */}
       <section className="bg-gradient-to-br from-[#1E1E20] to-[#131315] p-6 sm:p-7 rounded-2xl border border-indigo-500/20 shadow-2xl text-white">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -188,11 +405,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
               <div className="flex items-center gap-2 shrink-0 flex-wrap">
                 <button
                   onClick={() => onNavigate('support_session')}
-                  className="px-4 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-lg font-extrabold text-xs transition-all shadow-lg shadow-red-600/25 flex items-center gap-1.5 active:scale-95"
-                  title="ইউটিউব স্টাইল সাপোর্ট প্লেয়ার সেশন শুরু করুন"
+                  className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-700 hover:from-indigo-500 hover:to-blue-500 text-white rounded-xl font-extrabold text-xs transition-all shadow-lg shadow-indigo-600/25 flex items-center gap-1.5 active:scale-95"
+                  title="প্লেলিস্ট আকারে সাপোর্ট সেশন শুরু করুন"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>প্লেয়ার সেশন (YouTube)</span>
+                  <span>▶ সাপোর্ট সেশন (প্লেলিস্ট)</span>
                 </button>
 
                 <button
@@ -317,10 +534,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowTurboRunner(true)}
-              className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs font-extrabold rounded-lg flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-transform active:scale-95 animate-pulse"
+              onClick={() => onNavigate('support_session')}
+              className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white text-xs font-extrabold rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-transform active:scale-95"
             >
-              <span>⚡ টার্বো ফাস্ট সাপোর্ট</span>
+              <Play className="w-3 h-3 fill-white" />
+              <span>▶ প্লেলিস্টে সাপোর্ট শুরু করুন</span>
             </button>
 
             <button
@@ -467,13 +685,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
       {/* In-feed Display Ad Slot */}
       <DisplayAdSlot format="horizontal_banner" />
 
-      {/* Turbo Fast Support Runner Modal */}
-      <TurboSupportRunner
-        isOpen={showTurboRunner}
-        onClose={() => setShowTurboRunner(false)}
-        allLinks={peerLinks}
-      />
-
       {/* In-App Post Viewer Modal */}
       <InAppPostViewerModal
         isOpen={Boolean(selectedPostForInAppView)}
@@ -498,6 +709,33 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
           targetLinkId={reportTarget.linkId}
           targetName={reportTarget.name}
         />
+      )}
+
+      {/* Screenshot Lightbox Modal */}
+      {previewScreenshotUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
+          <div className="relative max-w-2xl w-full bg-[#121216] border border-[#2A2A38] rounded-2xl overflow-hidden p-3 shadow-2xl">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#242432]">
+              <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-indigo-400" />
+                সদস্যের যুক্ত করা প্রুফ স্ক্রিনশট
+              </span>
+              <button
+                onClick={() => setPreviewScreenshotUrl(null)}
+                className="px-2.5 py-1 text-xs font-bold text-gray-400 hover:text-white bg-[#1C1C26] rounded-lg"
+              >
+                বন্ধ করুন ✕
+              </button>
+            </div>
+            <div className="flex items-center justify-center max-h-[75vh] overflow-auto">
+              <img 
+                src={previewScreenshotUrl} 
+                alt="Reported Screenshot" 
+                className="max-h-[70vh] object-contain rounded-lg border border-[#222230]"
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

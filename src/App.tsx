@@ -7,7 +7,7 @@ import { MemberDashboard } from './components/member/MemberDashboard';
 import { DailyLinksView } from './components/member/DailyLinksView';
 import { LeaderboardView } from './components/member/LeaderboardView';
 import { MemberProfileView } from './components/member/MemberProfileView';
-import { YouTubeStyleSupportSession } from './components/member/YouTubeStyleSupportSession';
+import { PlaylistSupportSession } from './components/member/PlaylistSupportSession';
 import { FreeToolsHub } from './components/tools/FreeToolsHub';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
@@ -58,7 +58,7 @@ const AppContent: React.FC = () => {
       case 'youtube_player':
         return (
           <div className="py-2 sm:py-4">
-            <YouTubeStyleSupportSession
+            <PlaylistSupportSession
               onClose={() => setCurrentView('daily_links')}
             />
           </div>

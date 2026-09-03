@@ -145,8 +145,10 @@ export interface Report {
   reporterName: string;
   reporterUsername?: string;
   category: ReportCategory;
+  reasons?: string[]; // Pre-defined Bengali reasons e.g. ['লিংক কাজ করছে না', 'কমেন্ট বন্ধ করা আছে']
   description: string;
   targetLinkId?: string;
+  targetLinkNumber?: number;
   targetMemberId?: string;
   targetMemberName?: string;
   screenshotUrl?: string;

@@ -73,9 +73,18 @@ interface AppContextType {
 
   // Member Actions
   submitDailyLink: (postUrl: string, caption?: string) => { success: boolean; message: string; linkNumber?: number };
+  updateDailyLinkUrl: (linkId: string, newUrl: string) => { success: boolean; message: string };
   markLinkSupported: (dailyLinkId: string) => { success: boolean; message: string };
   unmarkLinkSupported: (dailyLinkId: string) => { success: boolean; message: string };
-  submitReport: (category: ReportCategory, description: string, targetLinkId?: string, targetMemberId?: string, screenshotUrl?: string) => { success: boolean; message: string };
+  submitReport: (
+    category: ReportCategory, 
+    description: string, 
+    targetLinkId?: string, 
+    targetMemberId?: string, 
+    screenshotUrl?: string,
+    reasons?: string[]
+  ) => { success: boolean; message: string };
+  resolveReportsForLink: (linkId: string) => void;
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
 
@@ -549,36 +558,101 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true, message: 'Support un-marked.' };
   };
 
+  const updateDailyLinkUrl = (linkId: string, newUrl: string) => {
+    if (!newUrl || !newUrl.trim()) return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্টের লিংক দিন।' };
+    const trimmed = newUrl.trim();
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      return { success: false, message: 'লিংকটি https:// দিয়ে শুরু হতে হবে।' };
+    }
+
+    setDailyLinks(prev => prev.map(l => l.id === linkId ? { ...l, postUrl: trimmed } : l));
+    
+    // Also mark any open reports on this link as updated by author
+    setReports(prev => prev.map(r => {
+      if (r.targetLinkId === linkId && (r.status === 'open' || r.status === 'pending')) {
+        return { ...r, adminNotes: 'লিংক দাতা নতুন লিংক দিয়ে আপডেট করেছেন' };
+      }
+      return r;
+    }));
+
+    return { success: true, message: '✓ আপনার ফেসবুক পোস্টের লিংক সফলভাবে আপডেট করা হয়েছে!' };
+  };
+
+  const resolveReportsForLink = (linkId: string) => {
+    setReports(prev => prev.map(r => {
+      if (r.targetLinkId === linkId && (r.status === 'open' || r.status === 'pending')) {
+        return { ...r, status: 'resolved', adminNotes: 'লিংক দাতা পরীক্ষা করে সমাধান নিশ্চিত করেছেন' };
+      }
+      return r;
+    }));
+  };
+
   // Submit Report
-  const submitReport = (category: ReportCategory, description: string, targetLinkId?: string, targetMemberId?: string, screenshotUrl?: string) => {
+  const submitReport = (
+    category: ReportCategory, 
+    description: string, 
+    targetLinkId?: string, 
+    targetMemberId?: string, 
+    screenshotUrl?: string,
+    reasons?: string[]
+  ) => {
     if (!currentUser) return { success: false, message: 'Please log in to submit a report.' };
 
     let targetMemberName = '';
-    if (targetMemberId) {
-      const tm = members.find(m => m.id === targetMemberId);
-      if (tm) targetMemberName = tm.name;
-    } else if (targetLinkId) {
+    let finalTargetMemberId = targetMemberId;
+    let targetLinkNumber: number | undefined;
+
+    if (targetLinkId) {
       const tl = dailyLinks.find(l => l.id === targetLinkId);
-      if (tl) targetMemberName = tl.memberName;
+      if (tl) {
+        targetMemberName = tl.memberName;
+        finalTargetMemberId = tl.memberId;
+        targetLinkNumber = tl.linkNumber;
+      }
+    }
+
+    if (!targetMemberName && finalTargetMemberId) {
+      const tm = members.find(m => m.id === finalTargetMemberId);
+      if (tm) targetMemberName = tm.name;
     }
 
     const newReport: Report = {
       id: `rep_${Date.now()}`,
       reporterId: currentUser.id,
       reporterName: currentUser.name,
+      reporterUsername: currentUser.username,
       category,
+      reasons: reasons && reasons.length > 0 ? reasons : undefined,
       description,
       targetLinkId,
-      targetMemberId,
+      targetLinkNumber,
+      targetMemberId: finalTargetMemberId,
       targetMemberName,
       screenshotUrl,
       status: 'open',
-      createdAt: new Date().toLocaleString('en-US', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }),
+      createdAt: new Date().toLocaleString('bn-BD', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }),
       communityId: currentCommunityId
     };
 
     setReports(prev => [newReport, ...prev]);
-    return { success: true, message: '✓ Report submitted to community admins. Thank you for keeping Support Link Box clean!' };
+
+    // Send immediate high-priority warning notification to the link owner
+    if (finalTargetMemberId && finalTargetMemberId !== currentUser.id) {
+      const reasonSummary = (reasons && reasons.length > 0) ? reasons.join(', ') : (description || 'সমস্যা রিপোর্ট করা হয়েছে');
+      const ownerNotif: AppNotification = {
+        id: `notif_${Date.now()}_rep_owner`,
+        userId: finalTargetMemberId,
+        type: 'warning',
+        title: targetLinkNumber ? `⚠️ আপনার লিংক #${targetLinkNumber}-এ সমস্যা রিপোর্ট এসেছে!` : `⚠️ আপনার লিংকে সমস্যা রিপোর্ট এসেছে!`,
+        message: `${currentUser.name} সমস্যা জানিয়েছেন: ${reasonSummary}`,
+        timestamp: 'এইমাত্র',
+        read: false,
+        actionUrl: 'dashboard'
+      };
+      setNotifications(prev => [ownerNotif, ...prev]);
+    }
+
+    return { success: true, message: '✓ সমস্যা রিপোর্ট সফলভাবে সাবমিট হয়েছে। লিংক দাতা ও এডমিনকে অবহিত করা হয়েছে।' };
   };
 
   // Notifications
@@ -1162,9 +1236,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         toggleDarkMode,
 
         submitDailyLink,
+        updateDailyLinkUrl,
         markLinkSupported,
         unmarkLinkSupported,
         submitReport,
+        resolveReportsForLink,
         markNotificationRead,
         markAllNotificationsRead,
 
