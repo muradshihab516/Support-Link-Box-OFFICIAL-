@@ -85,6 +85,10 @@ export const INITIAL_SETTINGS: SystemSettings = {
   tagline: 'Submit • Support • Grow',
   supportDeadlineTime: '23:59',
   timezone: 'Asia/Dhaka',
+  submissionWindowStart: '10:00',
+  submissionWindowEnd: '16:50',
+  submissionWindowEnabled: true,
+  submissionOpen: true,
   pointsSchema: {
     first: 5,
     second: 4,

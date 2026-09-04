@@ -22,7 +22,11 @@ import {
   Globe,
   Share2,
   AlertTriangle,
-  Flag
+  Flag,
+  Image as ImageIcon,
+  Video,
+  Crown,
+  ShieldCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -694,9 +698,26 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
                   লিংক #{activeLink.linkNumber.toString().padStart(2, '0')}
                 </span>
                 
-                {activeLink.category && (
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                {/* Post Type Badge */}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 ${
+                  activeLink.postType === 'video'
+                    ? 'bg-purple-500/15 border-purple-500/30 text-purple-300'
+                    : 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+                }`}>
+                  {activeLink.postType === 'video' ? <><Video className="w-3 h-3" /> ভিডিও</> : <><ImageIcon className="w-3 h-3" /> ফটো</>}
+                </span>
+
+                {activeLink.category && activeLink.category !== 'member' && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                    {activeLink.category === 'vip' && <Crown className="w-3 h-3" />}
+                    {activeLink.category === 'admin' && <ShieldCheck className="w-3 h-3" />}
                     {activeLink.category}
+                  </span>
+                )}
+
+                {activeLink.isSubmittedByAdmin && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                    👤 Proxy: {activeLink.submittedByAdminName || 'Admin'}
                   </span>
                 )}
 
@@ -808,10 +829,18 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
               );
             })()}
 
+            {/* Supporter Instruction / Direction if present */}
+            {activeLink.instruction && (
+              <div className="px-2.5 py-1.5 bg-indigo-950/40 border border-indigo-500/30 rounded-lg text-xs text-indigo-200 leading-snug flex items-start gap-1.5">
+                <span className="font-bold text-indigo-400 shrink-0">🎯 দিকনির্দেশনা:</span>
+                <span className="font-medium">{activeLink.instruction}</span>
+              </div>
+            )}
+
             {/* Post Caption / Note if present (Compact 1-liner) */}
             {activeLink.caption && (
               <div className="px-2.5 py-1.5 bg-[#0A0A0E] border border-[#1A1A22] rounded-lg text-xs text-gray-300 leading-snug truncate">
-                <span className="text-gray-500 font-semibold mr-1">নোট:</span>
+                <span className="text-gray-500 font-semibold mr-1">ক্যাপশন:</span>
                 "{activeLink.caption}"
               </div>
             )}

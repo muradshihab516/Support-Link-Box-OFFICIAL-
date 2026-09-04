@@ -18,7 +18,9 @@ import {
   NoticeType,
   ReportCategory,
   ReportStatus,
-  Badge
+  Badge,
+  PostContentType,
+  LinkCategoryType
 } from '../types';
 import {
   INITIAL_MEMBERS,
@@ -37,6 +39,7 @@ import {
   INITIAL_BADGES
 } from '../data/seedData';
 import { cleanAndFormatFacebookUrl } from '../utils/facebookLinks';
+import { checkBangladeshSubmissionWindow, getBangladeshCurrentTime12h } from '../utils/bangladeshTime';
 
 interface AppContextType {
   // State
@@ -71,8 +74,17 @@ interface AppContextType {
   switchCommunity: (communityId: string) => void;
   toggleDarkMode: () => void;
 
-  // Member Actions
-  submitDailyLink: (postUrl: string, caption?: string) => { success: boolean; message: string; linkNumber?: number };
+  // Member & Admin Actions
+  submitDailyLink: (
+    postUrl: string, 
+    caption?: string,
+    options?: {
+      postType?: PostContentType;
+      instruction?: string;
+      category?: LinkCategoryType;
+      targetMemberId?: string;
+    }
+  ) => { success: boolean; message: string; linkNumber?: number; link?: DailyLink };
   updateDailyLinkUrl: (linkId: string, newUrl: string) => { success: boolean; message: string };
   markLinkSupported: (dailyLinkId: string) => { success: boolean; message: string };
   unmarkLinkSupported: (dailyLinkId: string) => { success: boolean; message: string };
@@ -390,52 +402,128 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setDarkMode(prev => !prev);
   };
 
-  // Submit Daily Facebook Link (1 link per day rule)
-  const submitDailyLink = (postUrl: string, caption?: string) => {
+  // Submit Daily Facebook Link (1 link per day rule, BD Time Window, Admin Proxy & Special Links)
+  const submitDailyLink = (
+    postUrl: string, 
+    caption?: string,
+    options?: {
+      postType?: PostContentType;
+      instruction?: string;
+      category?: LinkCategoryType;
+      targetMemberId?: string;
+    }
+  ) => {
     if (!currentUser) {
       return { success: false, message: 'Please log in to submit today\'s link.' };
     }
 
-    if (currentUser.status === 'frozen') {
-      if (settings.allowAutoUnfreezeOnSubmit) {
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'moderator';
+
+    // Target member resolution: either currentUser or (if admin) the selected target member
+    let effectiveMember = currentUser;
+    let isProxySubmission = false;
+
+    if (options?.targetMemberId && options.targetMemberId !== currentUser.id) {
+      if (!isAdmin) {
+        return { success: false, message: 'Only admins can submit links on behalf of other members.' };
+      }
+      const matched = members.find(m => m.id === options.targetMemberId);
+      if (!matched) {
+        return { success: false, message: 'Selected member was not found.' };
+      }
+      effectiveMember = matched;
+      isProxySubmission = true;
+    }
+
+    // Determine category / link type
+    const requestedCategory: LinkCategoryType = options?.category || 'member';
+    const isSpecialAdminLink = requestedCategory === 'admin' || requestedCategory === 'vip' || requestedCategory === 'notice';
+
+    // Permission check for special link categories
+    if (isSpecialAdminLink && !isAdmin) {
+      return { success: false, message: 'Only admins can submit Admin, VIP, or Notice links.' };
+    }
+
+    // Member status checks
+    if (effectiveMember.status === 'frozen') {
+      if (isAdmin || settings.allowAutoUnfreezeOnSubmit) {
         // Auto unfreeze member
-        setMembers(prev => prev.map(m => m.id === currentUser.id ? { ...m, status: 'active', inactiveDays: 0, lastActiveDate: TODAY } : m));
-        addAuditLog('AUTO_UNFREEZE_ON_SUBMIT', 'member', currentUser.id, currentUser.name, 'Member auto-reactivated upon submitting new link.');
+        setMembers(prev => prev.map(m => m.id === effectiveMember.id ? { ...m, status: 'active', inactiveDays: 0, lastActiveDate: TODAY } : m));
+        addAuditLog('AUTO_UNFREEZE_ON_SUBMIT', 'member', effectiveMember.id, effectiveMember.name, 'Member auto-reactivated upon link submission.');
       } else {
-        return { success: false, message: 'Your account is currently frozen. Please contact an admin for reactivation.' };
+        return { success: false, message: 'This member account is currently frozen. Please contact an admin for reactivation.' };
       }
     }
 
-    if (currentUser.status === 'suspended' || currentUser.status === 'removed') {
-      return { success: false, message: `Your account is ${currentUser.status}. Submission is restricted.` };
+    if (!isAdmin && (effectiveMember.status === 'suspended' || effectiveMember.status === 'removed')) {
+      return { success: false, message: `Your account is ${effectiveMember.status}. Submission is restricted.` };
     }
 
-    // Check if already submitted today
-    const existingToday = dailyLinks.find(l => l.memberId === currentUser.id && l.date === TODAY && l.communityId === currentCommunityId);
-    if (existingToday) {
-      return { success: false, message: `You have already submitted today's link (Link #${existingToday.linkNumber}). Maximum 1 submission per day.` };
+    // Daily Limit check:
+    // Special admin links (admin, vip, notice) DO NOT have daily 1-link restriction!
+    // Regular member links strictly enforce 1 link per member per day.
+    if (!isSpecialAdminLink) {
+      const existingToday = dailyLinks.find(l => 
+        l.memberId === effectiveMember.id && 
+        l.date === TODAY && 
+        l.communityId === currentCommunityId &&
+        (!l.category || l.category === 'member')
+      );
+      if (existingToday) {
+        return { 
+          success: false, 
+          message: isProxySubmission
+            ? `${effectiveMember.name} already has a link today (#${existingToday.linkNumber}). You have already submitted a link today.`
+            : 'You have already submitted a link today.' 
+        };
+      }
+    }
+
+    // Submission Time Window Check (Bangladesh Standard Time - Asia/Dhaka):
+    // Admins and Special Admin Links are EXEMPT from time window restrictions!
+    if (!isAdmin && !isSpecialAdminLink) {
+      const windowStatus = checkBangladeshSubmissionWindow(
+        settings.submissionWindowStart || '10:00',
+        settings.submissionWindowEnd || '16:50',
+        settings.submissionWindowEnabled !== false,
+        settings.submissionOpen !== false
+      );
+
+      if (!windowStatus.isOpenNow) {
+        return {
+          success: false,
+          message: windowStatus.statusMessageBengali || 'বর্তমানে লিংক সাবমিশন বন্ধ রয়েছে।'
+        };
+      }
     }
 
     // URL validation
-    if (!postUrl.includes('facebook.com') && !postUrl.includes('fb.watch') && !postUrl.includes('fb.me')) {
-      return { success: false, message: 'Please provide a valid Facebook post, video, or reel URL.' };
+    const trimmedUrl = postUrl.trim();
+    if (!trimmedUrl.includes('facebook.com') && !trimmedUrl.includes('fb.watch') && !trimmedUrl.includes('fb.me')) {
+      return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্ট, ভিডিও বা রিলস এর লিংক দিন।' };
     }
 
     const todayCommunityLinks = dailyLinks.filter(l => l.date === TODAY && l.communityId === currentCommunityId);
     const nextLinkNumber = todayCommunityLinks.length + 1;
-
-    const formattedUrl = cleanAndFormatFacebookUrl(postUrl, 'm');
+    const formattedUrl = cleanAndFormatFacebookUrl(trimmedUrl, 'm');
 
     const newLink: DailyLink = {
       id: `link_${Date.now()}`,
-      memberId: currentUser.id,
-      memberName: currentUser.name,
-      memberAvatar: currentUser.avatar,
-      memberUsername: currentUser.username,
+      memberId: effectiveMember.id,
+      memberName: effectiveMember.name,
+      memberAvatar: effectiveMember.avatar,
+      memberUsername: effectiveMember.username,
       linkNumber: nextLinkNumber,
       postUrl: formattedUrl,
-      caption: caption || '',
-      submittedAt: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      caption: caption?.trim() || '',
+      postType: options?.postType || 'photo',
+      instruction: options?.instruction?.trim() || '',
+      category: requestedCategory,
+      linkType: requestedCategory,
+      submittedByAdminId: isProxySubmission ? currentUser.id : undefined,
+      submittedByAdminName: isProxySubmission ? currentUser.name : undefined,
+      isSubmittedByAdmin: isProxySubmission,
+      submittedAt: getBangladeshCurrentTime12h(),
       date: TODAY,
       supportCount: 0,
       communityId: currentCommunityId,
@@ -446,7 +534,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // Update member stats
     setMembers(prev => prev.map(m => {
-      if (m.id === currentUser.id) {
+      if (m.id === effectiveMember.id) {
         return {
           ...m,
           totalLinksSubmitted: m.totalLinksSubmitted + 1,
@@ -458,16 +546,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return m;
     }));
 
+    if (isProxySubmission) {
+      addAuditLog(
+        'ADMIN_PROXY_LINK_SUBMIT',
+        'link',
+        newLink.id,
+        effectiveMember.name,
+        `Admin ${currentUser.name} submitted Link #${nextLinkNumber} on behalf of ${effectiveMember.name} (@${effectiveMember.username}).`
+      );
+    }
+
     // Calculate remaining links for feedback
     const remainingToSupport = todayCommunityLinks.length;
 
-    // Trigger Notification
+    // Trigger Notification for the member
     const newNotif: AppNotification = {
       id: `notif_${Date.now()}`,
-      userId: currentUser.id,
+      userId: effectiveMember.id,
       type: 'support_reminder',
-      title: `Link #${nextLinkNumber} Submitted!`,
-      message: `Your link was successfully listed. You have ${remainingToSupport} peer links to support today.`,
+      title: isProxySubmission 
+        ? `Link #${nextLinkNumber} Submitted by Admin!` 
+        : `Link #${nextLinkNumber} Submitted!`,
+      message: isProxySubmission
+        ? `Admin ${currentUser.name} has submitted today's link (#${nextLinkNumber}) on your behalf. Don't forget to support peers!`
+        : `Your link was successfully listed. You have ${remainingToSupport} peer links to support today.`,
       timestamp: 'Just now',
       read: false
     };
@@ -475,8 +577,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     return { 
       success: true, 
-      message: `✓ Link Submitted Successfully! Your Link Number is #${nextLinkNumber}.`, 
-      linkNumber: nextLinkNumber 
+      message: isProxySubmission
+        ? `✓ Link #${nextLinkNumber} submitted successfully on behalf of ${effectiveMember.name}!`
+        : `✓ Link Submitted Successfully! Your Link Number is #${nextLinkNumber}.`, 
+      linkNumber: nextLinkNumber,
+      link: newLink
     };
   };
 

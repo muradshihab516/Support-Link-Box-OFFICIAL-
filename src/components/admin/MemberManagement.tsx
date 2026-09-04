@@ -15,10 +15,12 @@ import {
   Download, 
   Flame,
   ExternalLink,
-  Plus
+  Plus,
+  Link as LinkIcon
 } from 'lucide-react';
 import { Member, MemberRole, MemberStatus } from '../../types';
 import { exportToCSV, getStatusBadgeColor } from '../../utils/helpers';
+import { LinkSubmissionModal } from '../member/LinkSubmissionModal';
 
 export const MemberManagement: React.FC = () => {
   const { 
@@ -37,6 +39,7 @@ export const MemberManagement: React.FC = () => {
   // Modals state
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [proxySubmitMemberId, setProxySubmitMemberId] = useState<string | null>(null);
   const [warningTarget, setWarningTarget] = useState<Member | null>(null);
   const [warningText, setWarningText] = useState('');
   const [warningType, setWarningType] = useState<'simple_warning' | 'alert_warning' | 'kickout_warning'>('simple_warning');
@@ -359,6 +362,15 @@ export const MemberManagement: React.FC = () => {
                           </button>
                         )}
 
+                        {/* Submit Link on behalf of Member (Proxy) */}
+                        <button
+                          onClick={() => setProxySubmitMemberId(member.id)}
+                          title={`মেম্বারের হয়ে লিংক সাবমিট করুন (#${member.memberNumber} ${member.name})`}
+                          className="p-1.5 text-gray-500 hover:text-emerald-400 hover:bg-[#1E1E20] rounded-lg transition-colors"
+                        >
+                          <LinkIcon className="w-4 h-4 text-emerald-400" />
+                        </button>
+
                         {/* Direct Warning Button */}
                         <button
                           onClick={() => setWarningTarget(member)}
@@ -601,6 +613,15 @@ export const MemberManagement: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Proxy Link Submission Modal */}
+      {proxySubmitMemberId && (
+        <LinkSubmissionModal
+          isOpen={!!proxySubmitMemberId}
+          onClose={() => setProxySubmitMemberId(null)}
+          initialTargetMemberId={proxySubmitMemberId}
+        />
       )}
 
     </div>

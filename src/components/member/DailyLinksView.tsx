@@ -19,7 +19,12 @@ import {
   ChevronDown,
   Layers,
   Play,
-  LayoutGrid
+  LayoutGrid,
+  Image as ImageIcon,
+  Video,
+  Crown,
+  ShieldCheck,
+  Bell
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
@@ -103,6 +108,8 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
         link.memberName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         link.memberUsername.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (link.caption && link.caption.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (link.instruction && link.instruction.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (link.postType && link.postType.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (link.badgeTitle && link.badgeTitle.toLowerCase().includes(searchQuery.toLowerCase())) ||
         link.linkNumber.toString().includes(searchQuery);
 
@@ -510,6 +517,43 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                   </div>
                 </div>
 
+                {/* Badges: Post Type, Category, Proxy attribution */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Post Type Badge */}
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                    link.postType === 'video'
+                      ? 'bg-purple-500/15 border-purple-500/30 text-purple-300'
+                      : 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+                  }`}>
+                    {link.postType === 'video' ? (
+                      <><Video className="w-3 h-3" /> ভিডিও (Video)</>
+                    ) : (
+                      <><ImageIcon className="w-3 h-3" /> ফটো (Photo)</>
+                    )}
+                  </span>
+
+                  {/* Category Badge */}
+                  {link.category && link.category !== 'member' && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                      link.category === 'vip' ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
+                      link.category === 'admin' ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' :
+                      'bg-rose-500/15 border-rose-500/30 text-rose-300'
+                    }`}>
+                      {link.category === 'vip' && <Crown className="w-3 h-3" />}
+                      {link.category === 'admin' && <ShieldCheck className="w-3 h-3" />}
+                      {link.category === 'notice' && <Bell className="w-3 h-3" />}
+                      <span className="capitalize">{link.category}</span>
+                    </span>
+                  )}
+
+                  {/* Admin Proxy attribution */}
+                  {link.isSubmittedByAdmin && (
+                    <span className="px-2 py-0.5 bg-amber-500/10 border border-amber-500/25 text-amber-400 rounded-md text-[10px] font-bold">
+                      👤 Admin Proxy ({link.submittedByAdminName || 'Admin'})
+                    </span>
+                  )}
+                </div>
+
                 {/* Badge title if exists */}
                 {link.badgeTitle && (
                   <div className="flex items-center">
@@ -526,7 +570,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                 )}
 
                 {/* Caption / Note */}
-                <div className="p-3 bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-xs text-gray-300 min-h-[52px]">
+                <div className="p-3 bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-xs text-gray-300 min-h-[52px] space-y-2">
                   {link.caption ? (
                     <p className="line-clamp-2 italic font-normal">
                       "{link.caption}"
@@ -535,6 +579,14 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                     <span className="text-gray-500 italic">
                       Support exchange post on Facebook. React and comment!
                     </span>
+                  )}
+
+                  {/* Support Instruction if provided */}
+                  {link.instruction && (
+                    <div className="pt-2 border-t border-[#1E1E20]/80">
+                      <span className="text-[10px] font-bold text-indigo-400 block">🎯 দিকনির্দেশনা:</span>
+                      <p className="text-[11px] text-indigo-200 mt-0.5 line-clamp-2">{link.instruction}</p>
+                    </div>
                   )}
                 </div>
 

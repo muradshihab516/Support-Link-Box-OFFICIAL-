@@ -66,6 +66,9 @@ export interface Member {
   suspendedAt?: string;
 }
 
+export type PostContentType = 'photo' | 'video';
+export type LinkCategoryType = 'member' | 'admin' | 'vip' | 'notice';
+
 export interface DailyLink {
   id: string;
   memberId: string;
@@ -75,12 +78,18 @@ export interface DailyLink {
   linkNumber: number; // e.g. #57
   postUrl: string;
   caption?: string;
+  postType?: PostContentType; // 'photo' | 'video'
+  instruction?: string; // e.g. "React + Comment করবেন"
+  category?: LinkCategoryType | 'batch';
+  linkType?: LinkCategoryType;
+  submittedByAdminId?: string; // If submitted by admin on behalf of member
+  submittedByAdminName?: string;
+  isSubmittedByAdmin?: boolean;
   submittedAt: string; // ISO or human readable
   date: string; // YYYY-MM-DD
   supportCount: number;
   communityId: string;
   verified: boolean;
-  category?: 'batch' | 'vip' | 'admin';
   badgeTitle?: string;
 }
 
@@ -252,6 +261,10 @@ export interface SystemSettings {
   supportDeadlineTime: string; // e.g. "23:59" or "12:00 AM"
   dailyDeadlineTime?: string;
   timezone: string;
+  submissionWindowStart: string; // e.g. "10:00"
+  submissionWindowEnd: string; // e.g. "16:50"
+  submissionWindowEnabled: boolean;
+  submissionOpen: boolean; // master emergency toggle
   pointsSchema: {
     first: number;
     second: number;

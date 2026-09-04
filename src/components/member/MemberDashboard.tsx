@@ -25,7 +25,10 @@ import {
   CheckCircle,
   RefreshCw,
   MessageSquare,
-  CornerDownRight
+  CornerDownRight,
+  Video,
+  Crown,
+  Bell
 } from 'lucide-react';
 import { getFacebookAppUrl, getFacebookWebBrowserUrl } from '../../utils/facebookLinks';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
@@ -684,10 +687,40 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
                   </span>
                 </div>
 
+                {/* Badges: Post Type & Category & Proxy */}
+                <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${
+                    link.postType === 'video'
+                      ? 'bg-purple-500/15 border-purple-500/30 text-purple-300'
+                      : 'bg-blue-500/15 border-blue-500/30 text-blue-300'
+                  }`}>
+                    {link.postType === 'video' ? <><Video className="w-3 h-3" /> ভিডিও</> : <><ImageIcon className="w-3 h-3" /> ফটো</>}
+                  </span>
+
+                  {link.category && link.category !== 'member' && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 uppercase">
+                      {link.category}
+                    </span>
+                  )}
+
+                  {link.isSubmittedByAdmin && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                      👤 Admin Proxy
+                    </span>
+                  )}
+                </div>
+
                 {link.caption && (
-                  <p className="text-xs text-gray-300 mb-3 line-clamp-2 italic">
+                  <p className="text-xs text-gray-300 mb-2 line-clamp-2 italic">
                     "{link.caption}"
                   </p>
+                )}
+
+                {link.instruction && (
+                  <div className="p-2 mb-2 bg-indigo-500/10 border border-indigo-500/20 rounded-lg text-xs text-indigo-200">
+                    <span className="text-[10px] font-bold text-indigo-400 block">🎯 দিকনির্দেশনা:</span>
+                    <p className="line-clamp-1">{link.instruction}</p>
+                  </div>
                 )}
 
                 <div className="flex items-center gap-2 pt-2 border-t border-[#1E1E20]">
