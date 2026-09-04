@@ -68,9 +68,15 @@ export function openInBrowserSafely(url: string, variant: 'm' | 'mbasic' | 'www'
 
 /**
  * Generates URL optimized for Facebook App
+ * Preserves canonical domain to avoid double-loading redirects in mobile Chrome/Android.
  */
 export function getFacebookAppUrl(rawUrl: string): string {
-  return cleanAndFormatFacebookUrl(rawUrl, 'm');
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  let url = rawUrl.trim();
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'https://' + url;
+  }
+  return url;
 }
 
 /**

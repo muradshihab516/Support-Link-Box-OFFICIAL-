@@ -17,7 +17,7 @@ export type SponsorPosition =
   | 'footer';
 
 export type ReportCategory = 'broken_link' | 'fake_support' | 'inappropriate_content' | 'profile_issue' | 'other';
-export type ReportStatus = 'open' | 'pending' | 'resolved' | 'dismissed';
+export type ReportStatus = 'open' | 'pending' | 'in_discussion' | 'resolved' | 'dismissed';
 
 export type Sponsor = SponsorAd;
 export type RevenueLog = RevenueRecord;
@@ -139,11 +139,25 @@ export interface Notice {
   communityId: string;
 }
 
+export interface ReportReply {
+  id: string;
+  reportId: string;
+  senderId: string;
+  senderName: string;
+  senderUsername?: string;
+  senderAvatar?: string;
+  senderRole: 'reporter' | 'link_owner' | 'admin' | 'moderator';
+  message: string;
+  screenshotUrl?: string;
+  createdAt: string;
+}
+
 export interface Report {
   id: string;
   reporterId: string;
   reporterName: string;
   reporterUsername?: string;
+  reporterAvatar?: string;
   category: ReportCategory;
   reasons?: string[]; // Pre-defined Bengali reasons e.g. ['লিংক কাজ করছে না', 'কমেন্ট বন্ধ করা আছে']
   description: string;
@@ -154,9 +168,12 @@ export interface Report {
   screenshotUrl?: string;
   status: ReportStatus;
   createdAt: string;
+  updatedAt?: string;
   adminNotes?: string;
   resolvedBy?: string;
   communityId: string;
+  replies?: ReportReply[];
+  unreadBy?: string[]; // List of user IDs who have not viewed latest update
 }
 
 export interface SponsorAd {
@@ -210,12 +227,13 @@ export interface AuditLog {
 export interface AppNotification {
   id: string;
   userId: string; // 'all' or memberId
-  type: 'support_reminder' | 'deadline' | 'rank_up' | 'streak' | 'warning' | 'announcement' | 'winner';
+  type: 'support_reminder' | 'deadline' | 'rank_up' | 'streak' | 'warning' | 'announcement' | 'winner' | 'report_reply';
   title: string;
   message: string;
   timestamp: string;
   read: boolean;
   actionUrl?: string;
+  reportId?: string;
 }
 
 export interface Community {

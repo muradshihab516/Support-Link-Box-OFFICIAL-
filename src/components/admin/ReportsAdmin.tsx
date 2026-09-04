@@ -8,12 +8,13 @@ import {
   AlertTriangle, 
   Clock, 
   MessageSquare,
-  ShieldCheck
+  ShieldCheck,
+  CornerDownRight
 } from 'lucide-react';
 
 export const ReportsAdmin: React.FC = () => {
-  const { reports, dailyLinks, resolveReport } = useApp();
-  const [filter, setFilter] = useState<'all' | 'pending' | 'resolved' | 'dismissed'>('all');
+  const { reports, dailyLinks, resolveReport, setActiveReportModalId, currentUser } = useApp();
+  const [filter, setFilter] = useState<'all' | 'pending' | 'in_discussion' | 'resolved' | 'dismissed'>('all');
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState('');
   const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
@@ -46,8 +47,8 @@ export const ReportsAdmin: React.FC = () => {
         </div>
 
         {/* Filter Tabs */}
-        <div className="flex bg-[#0E0E10] p-1 rounded-xl border border-[#1E1E20]">
-          {(['all', 'pending', 'resolved', 'dismissed'] as const).map(tab => (
+        <div className="flex bg-[#0E0E10] p-1 rounded-xl border border-[#1E1E20] flex-wrap gap-1">
+          {(['all', 'pending', 'in_discussion', 'resolved', 'dismissed'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setFilter(tab)}
@@ -57,7 +58,7 @@ export const ReportsAdmin: React.FC = () => {
                   : 'text-gray-400 hover:text-white'
               }`}
             >
-              {tab === 'pending' ? 'Open / Pending' : tab} ({reports.filter(r => {
+              {tab === 'pending' ? 'Open / Pending' : tab === 'in_discussion' ? 'In Discussion' : tab} ({reports.filter(r => {
                 if (tab === 'all') return true;
                 if (tab === 'pending') return r.status === 'pending' || r.status === 'open';
                 return r.status === tab;
@@ -78,7 +79,9 @@ export const ReportsAdmin: React.FC = () => {
             <div
               key={report.id}
               className={`p-5 rounded-2xl border transition-all ${
-                isPending
+                report.status === 'in_discussion'
+                  ? 'bg-[#131315] border-indigo-500/40 shadow-xs'
+                  : isPending
                   ? 'bg-[#131315] border-amber-500/30 shadow-xs'
                   : 'bg-[#131315]/60 border-[#1E1E20] opacity-80'
               }`}
@@ -87,13 +90,15 @@ export const ReportsAdmin: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                      isPending
+                      report.status === 'in_discussion'
+                        ? 'bg-indigo-500/15 border border-indigo-500/30 text-indigo-300'
+                        : isPending
                         ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
                         : report.status === 'resolved'
                         ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
                         : 'bg-white/5 text-gray-400'
                     }`}>
-                      {report.status}
+                      {report.status === 'in_discussion' ? '💬 In Discussion' : report.status}
                     </span>
                     <span className="text-xs font-bold text-white capitalize">
                       {report.category.replace('_', ' ')}
@@ -109,7 +114,7 @@ export const ReportsAdmin: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {matchedLink?.postUrl && (
                     <a
                       href={matchedLink.postUrl}
@@ -122,7 +127,18 @@ export const ReportsAdmin: React.FC = () => {
                       <span>পোস্ট দেখুন</span>
                     </a>
                   )}
-                  {isPending && (
+
+                  {/* Conversation / Discussion Thread Button */}
+                  <button
+                    onClick={() => setActiveReportModalId(report.id)}
+                    className="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 hover:text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition-colors"
+                    title="রিপোর্টকারী এবং লিংক ওনারের সাথে থ্রেডে কথা বলুন"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>আলোচনা ও রিপ্লাই ({report.replies ? report.replies.length : 0})</span>
+                  </button>
+
+                  {(isPending || report.status === 'in_discussion') && (
                     <button
                       onClick={() => setResolvingId(report.id)}
                       className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg shadow-lg shadow-indigo-600/20 transition-colors"
@@ -132,6 +148,32 @@ export const ReportsAdmin: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* Latest Reply Snippet in admin list */}
+              {report.replies && report.replies.length > 0 && (
+                <div 
+                  onClick={() => setActiveReportModalId(report.id)}
+                  className="my-2 p-2.5 bg-[#0C0C10] border border-indigo-500/20 rounded-xl cursor-pointer hover:border-indigo-500/40 transition-colors flex items-start gap-2 text-xs"
+                >
+                  <CornerDownRight className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between text-[11px] mb-0.5">
+                      <span className="font-bold text-gray-200">
+                        {report.replies[report.replies.length - 1].senderName}
+                        <span className="text-[10px] text-gray-400 ml-1 font-normal">
+                          ({report.replies[report.replies.length - 1].senderRole === 'admin' ? 'এডমিন' : report.replies[report.replies.length - 1].senderRole === 'link_owner' ? 'লিংক ওনার' : 'রিপোর্টার'})
+                        </span>
+                      </span>
+                      <span className="text-[10px] text-gray-500">
+                        {report.replies[report.replies.length - 1].createdAt.slice(11, 16)} • {report.replies.length}টি মেসেজ
+                      </span>
+                    </div>
+                    <p className="text-gray-300 italic line-clamp-1">
+                      "{report.replies[report.replies.length - 1].message}"
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Pre-defined selected tags */}
               {report.reasons && report.reasons.length > 0 && (

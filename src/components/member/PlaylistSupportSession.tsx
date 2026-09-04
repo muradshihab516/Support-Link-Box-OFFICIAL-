@@ -94,9 +94,17 @@ interface PendingSupportRecord {
   fromIndex: number;
 }
 
-// Safeguard threshold: User must spend at least 4.5 seconds (4-5s) on Facebook before auto-mark.
-// Quick or instant returns (<4.5s) are treated as accidental switches, keeping the link pending.
-const MIN_FB_DWELL_TIME_MS = 4500;
+// Safeguard thresholds:
+// 1. LAUNCH_GRACE_PERIOD_MS (2500ms): When launching Facebook app/web from mobile Chrome,
+// the browser dispatches intent and temporarily blurs/focuses or fires visibilitychange during the
+// initial 0.1s - 2.5s launch animation. Any focus/visibility events during this window are browser
+// launch artifacts and MUST BE COMPLETELY IGNORED (never treated as user returning).
+const LAUNCH_GRACE_PERIOD_MS = 2500;
+
+// 2. MIN_FB_DWELL_TIME_MS (3500ms): Minimum realistic time to view and support a post on FB.
+// When returning after 3.5s+, auto-mark completes and advances.
+// If user returns between 2.5s and 3.5s, pending status is NEVER canceled — user can simply tap "ব্যাক এসেছি / সম্পন্ন".
+const MIN_FB_DWELL_TIME_MS = 3500;
 
 export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
   initialLinkId,
@@ -165,6 +173,16 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
       const foundIndex = sortedLinks.findIndex(l => l.id === initialLinkId);
       if (foundIndex !== -1) return foundIndex;
     }
+    // Check saved index from localStorage to resume where user left off
+    try {
+      const savedIdx = localStorage.getItem('slb_playlist_active_index');
+      if (savedIdx !== null) {
+        const parsed = parseInt(savedIdx, 10);
+        if (!isNaN(parsed) && parsed >= 0 && parsed < sortedLinks.length) {
+          return parsed;
+        }
+      }
+    } catch {}
     // Default to first pending link if available
     if (currentUser && stats) {
       const firstPendingIndex = sortedLinks.findIndex(l => !stats.supportedLinkIds.has(l.id) && l.memberId !== currentUser.id);
@@ -172,6 +190,12 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
     }
     return 0;
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('slb_playlist_active_index', currentIndex.toString());
+    } catch {}
+  }, [currentIndex]);
 
   const activeLink = sortedLinks[currentIndex] || sortedLinks[0];
 
@@ -264,6 +288,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
     pendingSupportRef.current = null;
     setPendingSupport(null);
     try {
+      localStorage.removeItem('slb_pending_support');
       sessionStorage.removeItem('slb_pending_support');
     } catch {}
 
@@ -325,9 +350,9 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
   // =========================================================================
   // SAFEGUARDED RETURN DETECTOR
   // 1. pendingReturn is strictly active ONLY after clicking "Support Now"
-  //    (Incoming calls, notifications, or app switches will NEVER falsely mark)
-  // 2. Minimum 4-5s dwell time on Facebook required
-  //    (Quick/instant return is treated as accidental switch; link remains pending)
+  // 2. LAUNCH_GRACE_PERIOD_MS (0-2.5s) ignores browser tab/intent launch transition events
+  // 3. User dwell time >= 3.5s automatically completes and advances
+  // 4. Returning earlier is NEVER canceled — button remains available to confirm manually
   // =========================================================================
   useEffect(() => {
     const checkAndTriggerReturn = () => {
@@ -337,32 +362,26 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
 
       const elapsed = Date.now() - pending.openedAt;
 
-      // Safeguard: If user returned in less than 4.5 seconds
-      if (elapsed < MIN_FB_DWELL_TIME_MS) {
-        // Accidental switch detected! Cancel pending return, keep link pending
-        pendingSupportRef.current = null;
-        setPendingSupport(null);
-        try {
-          sessionStorage.removeItem('slb_pending_support');
-        } catch {}
-
-        try {
-          if ('vibrate' in navigator) navigator.vibrate([40, 60, 40]);
-        } catch {}
-
-        setStatusNotice({
-          type: 'warning',
-          message: `⚠️ তাৎক্ষণিক ফিরে আসায় (${(elapsed / 1000).toFixed(1)} সে.) অটো-মার্ক বাতিল হয়েছে! দুর্ঘটনাজনিত সুইচ বিবেচনা করে লিংক #${pending.linkNumber} পেন্ডিং রাখা হয়েছে। ফেসবুকে কমপক্ষে ৪-৫ সেকেন্ড কাটান।`
-        });
-
-        setTimeout(() => {
-          setStatusNotice(null);
-        }, 5500);
+      // 1. Launch Grace Period:
+      // When opening a link on mobile Chrome, the browser fires focus/visibilitychange events
+      // during the first 0.1 - 2.5 seconds as the new tab or Android Intent loads.
+      // This is browser transition noise — DO NOT treat it as user returning!
+      if (elapsed < LAUNCH_GRACE_PERIOD_MS) {
         return;
       }
 
-      // Valid return after spending at least 4.5 seconds on Facebook
-      completeSupportAndAdvance(pending.linkId, pending.linkNumber, pending.fromIndex);
+      // 2. Minimum Dwell Time (3.5s+):
+      // If user returns after spending adequate time on Facebook, automatically complete and advance!
+      if (elapsed >= MIN_FB_DWELL_TIME_MS) {
+        completeSupportAndAdvance(pending.linkId, pending.linkNumber, pending.fromIndex);
+        return;
+      }
+
+      // 3. Returned between 2.5s and 3.5s: Keep pending active so member can tap confirm
+      setStatusNotice({
+        type: 'info',
+        message: `⏳ ফেসবুকে পোস্ট সাপোর্ট সম্পন্ন হলে নিচে "ব্যাক এসেছি ▶" বাটনে চাপুন।`
+      });
     };
 
     const handleVisibilityChange = () => {
@@ -390,17 +409,21 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
     };
   }, [completeSupportAndAdvance]);
 
-  // Restore pending session if page reloaded on return (with 4-5s safeguard)
+  // Restore pending session if page reloaded on return (with safeguard)
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem('slb_pending_support');
+      const saved = localStorage.getItem('slb_pending_support') || sessionStorage.getItem('slb_pending_support');
       if (saved) {
         const parsed = JSON.parse(saved) as PendingSupportRecord;
         if (parsed && parsed.linkId) {
           const elapsed = Date.now() - parsed.openedAt;
-          if (elapsed >= MIN_FB_DWELL_TIME_MS && elapsed < 300000) {
+          if (elapsed >= MIN_FB_DWELL_TIME_MS && elapsed < 600000) {
             completeSupportAndAdvance(parsed.linkId, parsed.linkNumber, parsed.fromIndex);
+          } else if (elapsed < MIN_FB_DWELL_TIME_MS) {
+            setPendingSupport(parsed);
+            pendingSupportRef.current = parsed;
           } else {
+            localStorage.removeItem('slb_pending_support');
             sessionStorage.removeItem('slb_pending_support');
           }
         }
@@ -408,22 +431,10 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
     } catch {}
   }, [completeSupportAndAdvance]);
 
-  // Fallback manual confirm with 4-5s safeguard
+  // Fallback manual confirm: Instant completion when tapped by member
   const handleManualReturnConfirm = () => {
     const pending = pendingSupportRef.current;
     if (!pending) return;
-
-    const elapsed = Date.now() - pending.openedAt;
-    if (elapsed < MIN_FB_DWELL_TIME_MS) {
-      const remainingSec = Math.ceil((MIN_FB_DWELL_TIME_MS - elapsed) / 1000);
-      setStatusNotice({
-        type: 'warning',
-        message: `⏳ ফেসবুকে পোস্ট লাইক/কমেন্ট করতে আরও ${remainingSec} সেকেন্ড সময় দিন (কমপক্ষে ৪-৫ সেকেন্ড)।`
-      });
-      setTimeout(() => setStatusNotice(null), 4000);
-      return;
-    }
-
     completeSupportAndAdvance(pending.linkId, pending.linkNumber, pending.fromIndex);
   };
 
@@ -466,6 +477,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
     setPendingSupport(newPending);
     pendingSupportRef.current = newPending;
     try {
+      localStorage.setItem('slb_pending_support', JSON.stringify(newPending));
       sessionStorage.setItem('slb_pending_support', JSON.stringify(newPending));
     } catch {}
 
@@ -482,6 +494,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
       pendingSupportRef.current = null;
       setPendingSupport(null);
       try {
+        localStorage.removeItem('slb_pending_support');
         sessionStorage.removeItem('slb_pending_support');
       } catch {}
     }

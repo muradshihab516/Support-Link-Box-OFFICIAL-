@@ -41,7 +41,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
     markNotificationRead, 
     markAllNotificationsRead,
     settings,
-    logout
+    logout,
+    setActiveReportModalId
   } = useApp();
 
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -272,7 +273,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
                         notifications.slice(0, 8).map(notif => (
                           <div 
                             key={notif.id}
-                            onClick={() => markNotificationRead(notif.id)}
+                            onClick={() => {
+                              markNotificationRead(notif.id);
+                              if (notif.reportId) {
+                                setActiveReportModalId(notif.reportId);
+                                setShowNotifDropdown(false);
+                              } else if (notif.actionUrl) {
+                                onNavigate(notif.actionUrl);
+                                setShowNotifDropdown(false);
+                              }
+                            }}
                             className={`p-3 text-xs cursor-pointer hover:bg-[#1E1E20] transition-colors ${
                               !notif.read ? 'bg-indigo-600/10' : ''
                             }`}

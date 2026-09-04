@@ -58,7 +58,20 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, boolean>>({});
 
   // View Mode: Playlist Support Session (Default) vs Card Grid
-  const [viewMode, setViewMode] = useState<'playlist' | 'grid'>('playlist');
+  const [viewMode, setViewModeState] = useState<'playlist' | 'grid'>(() => {
+    try {
+      const saved = localStorage.getItem('slb_daily_links_view_mode');
+      if (saved === 'grid' || saved === 'playlist') return saved;
+    } catch {}
+    return 'playlist';
+  });
+
+  const setViewMode = (mode: 'playlist' | 'grid') => {
+    setViewModeState(mode);
+    try {
+      localStorage.setItem('slb_daily_links_view_mode', mode);
+    } catch {}
+  };
   const [selectedPlayerLinkId, setSelectedPlayerLinkId] = useState<string | undefined>(undefined);
 
   // Pagination & Lazy-load state

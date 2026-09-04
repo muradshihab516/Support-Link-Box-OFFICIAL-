@@ -1531,16 +1531,81 @@ export const INITIAL_NOTICES: Notice[] = [
 // Reports
 export const INITIAL_REPORTS: Report[] = [
   {
+    id: 'rep_101',
+    reporterId: 'user_farhana',
+    reporterName: 'Farhana Akter',
+    reporterUsername: 'farhana_akter',
+    reporterAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    category: 'broken_link',
+    reasons: ['কমেন্ট বন্ধ করা আছে'],
+    description: 'ভাইয়া আপনার পোস্টে কমেন্ট অপশন বন্ধ করা রয়েছে। সাপোর্ট দিতে পারছি না।',
+    targetLinkId: 'link_123',
+    targetLinkNumber: 123,
+    targetMemberId: 'user_emon',
+    targetMemberName: 'Md Emon',
+    status: 'in_discussion',
+    createdAt: '2026-08-28 11:15 AM',
+    updatedAt: '2026-08-28 11:22 AM',
+    communityId: 'comm_default',
+    unreadBy: ['user_emon'],
+    replies: [
+      {
+        id: 'rep_r_1',
+        reportId: 'rep_101',
+        senderId: 'user_emon',
+        senderName: 'Md Emon',
+        senderUsername: 'emon123',
+        senderAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+        senderRole: 'link_owner',
+        message: 'আমি এখনই ফেসবুক অ্যাপ থেকে কমেন্ট সেকশন অন করে দিচ্ছি।',
+        createdAt: '11:18 AM'
+      },
+      {
+        id: 'rep_r_2',
+        reportId: 'rep_101',
+        senderId: 'user_admin_shihab',
+        senderName: 'Murad Shihab',
+        senderUsername: 'shihab_admin',
+        senderAvatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+        senderRole: 'admin',
+        message: 'লিংকটি আপডেট ও কমেন্ট চালু করার পর এখানে কনফার্ম করুন যাতে অন্য সদস্যরা ড্রপ না খায়।',
+        createdAt: '11:22 AM'
+      }
+    ]
+  },
+  {
+    id: 'rep_102',
+    reporterId: 'user_siam',
+    reporterName: 'Siam Ahmed',
+    reporterUsername: 'siam_creative',
+    reporterAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    category: 'broken_link',
+    reasons: ['পোস্ট Public নয় / অনলি ফ্রেন্ডস'],
+    description: 'পোস্টটি অনলি ফ্রেন্ডস হয়ে আছে, পাবলিক করুন।',
+    targetLinkId: 'link_123',
+    targetLinkNumber: 123,
+    targetMemberId: 'user_emon',
+    targetMemberName: 'Md Emon',
+    status: 'pending',
+    createdAt: '2026-08-28 11:35 AM',
+    communityId: 'comm_default',
+    unreadBy: ['user_emon'],
+    replies: []
+  },
+  {
     id: 'rep_1',
     reporterId: 'user_farhana',
     reporterName: 'Farhana Akter',
     category: 'broken_link',
     description: 'Post link #11 gives privacy error / content not found when opening in Facebook app.',
-    targetLinkId: 'link_11',
+    targetLinkId: 'link_110',
+    targetLinkNumber: 110,
+    targetMemberId: 'user_110',
     targetMemberName: 'Rubel Hossain',
     status: 'open',
     createdAt: '2026-08-28 01:45 PM',
-    communityId: 'comm_default'
+    communityId: 'comm_default',
+    replies: []
   },
   {
     id: 'rep_2',
@@ -1554,7 +1619,8 @@ export const INITIAL_REPORTS: Report[] = [
     createdAt: '2026-08-27 05:20 PM',
     adminNotes: 'Reviewed support logs. Issued simple warning to member.',
     resolvedBy: 'Admin Shihab',
-    communityId: 'comm_default'
+    communityId: 'comm_default',
+    replies: []
   }
 ];
 

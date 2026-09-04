@@ -23,7 +23,9 @@ import {
   Edit3,
   Image as ImageIcon,
   CheckCircle,
-  RefreshCw
+  RefreshCw,
+  MessageSquare,
+  CornerDownRight
 } from 'lucide-react';
 import { getFacebookAppUrl, getFacebookWebBrowserUrl } from '../../utils/facebookLinks';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
@@ -48,7 +50,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
     resolveReportsForLink,
     getTodaySupportStats, 
     markLinkSupported,
-    badges 
+    badges,
+    setActiveReportModalId
   } = useApp();
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -89,11 +92,28 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
   // User's own submitted link for today
   const userTodayLink = dailyLinks.find(l => l.memberId === currentUser.id);
 
-  // Reports submitted against currentUser's link today (open or pending)
+  // Reports submitted against currentUser's link today (open, pending, or in_discussion)
   const myLinkReports = reports.filter(r => 
     (r.targetMemberId === currentUser.id || (userTodayLink && r.targetLinkId === userTodayLink.id)) &&
-    (r.status === 'open' || r.status === 'pending')
+    (r.status === 'open' || r.status === 'pending' || r.status === 'in_discussion')
   );
+
+  // Reports submitted by currentUser
+  const mySubmittedReports = reports.filter(r => r.reporterId === currentUser.id);
+
+  // Summary breakdown of report reasons
+  const reasonsSummary = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    myLinkReports.forEach(r => {
+      if (r.reasons && r.reasons.length > 0) {
+        r.reasons.forEach(re => { counts[re] = (counts[re] || 0) + 1; });
+      } else {
+        const cat = r.category === 'broken_link' ? 'লিংক কাজ করছে না' : (r.description || 'অন্যান্য সমস্যা');
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return Object.entries(counts).map(([reason, count]) => `${count} × ${reason}`);
+  }, [myLinkReports]);
 
   // Handle saving corrected post URL
   const handleSaveEditedUrl = (e: React.FormEvent) => {
@@ -214,8 +234,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
                 </h2>
 
                 <p className="text-xs sm:text-sm text-rose-200/90 leading-relaxed max-w-2xl">
-                  অন্যান্য সদস্যরা আপনার পোস্টে সাপোর্ট দেওয়ার চেষ্টা করেছেন কিন্তু সমস্যার কারণে দিতে পারছেন না। দ্রুত ফেসবুক পোস্টটি চেক করুন অথবা নতুন লিংক দিন।
+                  অন্যান্য সদস্যরা আপনার পোস্টে সাপোর্ট দেওয়ার চেষ্টা করেছেন কিন্তু সমস্যার কারণে দিতে পারছেন না। দ্রুত রিপ্লাই দিয়ে সমাধান করুন অথবা নতুন লিংক দিন।
                 </p>
+
+                {/* Summary Tally of Reasons */}
+                {reasonsSummary.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] text-rose-300/80 font-bold mr-1">সমস্যার বিবরণ:</span>
+                    {reasonsSummary.map((item, idx) => (
+                      <span key={idx} className="px-2.5 py-0.5 rounded-md bg-rose-950/70 border border-rose-500/40 text-rose-200 text-xs font-semibold">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -294,63 +326,123 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
             </form>
           )}
 
-          {/* List of Reported Issues */}
+          {/* List of Reported Issues with Conversation / Reply Access */}
           <div className="space-y-2 pt-2 border-t border-rose-500/20">
-            <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider block">
-              সদস্যদের জানানো সমস্যাসমূহ ({myLinkReports.length}টি রিপোর্ট):
-            </span>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-              {myLinkReports.map((report) => (
-                <div 
-                  key={report.id} 
-                  className="p-3 bg-[#170C12] border border-rose-500/30 rounded-xl space-y-2 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
-                      {report.reporterName}
-                    </span>
-                    <span className="text-[10px] text-gray-400">
-                      {report.createdAt.split('T')[0]} {report.createdAt.split('T')[1]?.substring(0, 5)}
-                    </span>
-                  </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-rose-300 uppercase tracking-wider block">
+                সদস্যদের জানানো সমস্যাসমূহ ({myLinkReports.length}টি রিপোর্ট):
+              </span>
+              <span className="text-[11px] text-rose-400/80">
+                মেসেজ বা প্রুফ দেখতে যেকোনো রিপোর্টে ক্লিক বা রিপ্লাই দিন
+              </span>
+            </div>
 
-                  {/* Pre-defined Reasons Chips */}
-                  {report.reasons && report.reasons.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {report.reasons.map((reason, idx) => (
-                        <span 
-                          key={idx} 
-                          className="px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-rose-200 text-[11px] font-bold"
-                        >
-                          {reason}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {myLinkReports.map((report) => {
+                const hasUnread = report.unreadBy?.includes(currentUser.id);
+                const replyCount = report.replies ? report.replies.length : 0;
+                const latestReply = report.replies && report.replies.length > 0 
+                  ? report.replies[report.replies.length - 1] 
+                  : null;
+
+                return (
+                  <div 
+                    key={report.id} 
+                    className="p-3.5 bg-[#170C12] border border-rose-500/30 hover:border-rose-500/50 rounded-xl space-y-2.5 text-xs transition-colors shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" />
+                          {report.reporterName}
                         </span>
-                      ))}
+                        {hasUnread && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-600 text-white text-[9px] font-bold animate-pulse">
+                            নতুন মেসেজ
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          report.status === 'in_discussion'
+                            ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                            : report.status === 'resolved'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        }`}>
+                          {report.status === 'in_discussion' ? '💬 আলোচনা চলছে' : report.status === 'resolved' ? '✓ সমাধান' : '⏳ অপেক্ষমাণ'}
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          {report.createdAt.split('T')[0]} {report.createdAt.split('T')[1]?.substring(0, 5)}
+                        </span>
+                      </div>
                     </div>
-                  )}
 
-                  {/* Free-text Description if different from reasons */}
-                  {report.description && (!report.reasons || report.description !== report.reasons.join(', ')) && (
-                    <p className="text-gray-300 italic text-[11px] bg-[#0E060A] p-2 rounded-lg border border-rose-500/15">
-                      "{report.description}"
-                    </p>
-                  )}
+                    {/* Pre-defined Reasons Chips */}
+                    {report.reasons && report.reasons.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {report.reasons.map((reason, idx) => (
+                          <span 
+                            key={idx} 
+                            className="px-2 py-0.5 rounded-md bg-rose-500/20 border border-rose-500/40 text-rose-200 text-[11px] font-bold"
+                          >
+                            {reason}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Attached Screenshot Thumbnail */}
-                  {report.screenshotUrl && (
-                    <div className="flex items-center gap-2 pt-1">
+                    {/* Free-text Description if different from reasons */}
+                    {report.description && (!report.reasons || report.description !== report.reasons.join(', ')) && (
+                      <p className="text-gray-300 italic text-[11px] bg-[#0E060A] p-2 rounded-lg border border-rose-500/15">
+                        "{report.description}"
+                      </p>
+                    )}
+
+                    {/* Latest Reply Snippet */}
+                    {latestReply && (
+                      <div className="p-2 bg-[#0E060A] rounded-lg border border-indigo-500/20 text-[11px] text-gray-300 flex items-start gap-1.5">
+                        <CornerDownRight className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
+                        <div className="line-clamp-2">
+                          <span className="font-bold text-white">
+                            {latestReply.senderName}
+                            <span className="text-[9px] text-gray-400 font-normal ml-1">
+                              ({latestReply.senderRole === 'admin' ? 'এডমিন' : latestReply.senderRole === 'link_owner' ? 'আপনি (ওনার)' : 'রিপোর্টার'}):
+                            </span>
+                          </span>{' '}
+                          {latestReply.message}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Bar: Screenshot & Open Conversation Button */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-500/15">
+                      {report.screenshotUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewScreenshotUrl(report.screenshotUrl || null)}
+                          className="flex items-center gap-1.5 text-[11px] text-indigo-300 hover:text-indigo-200 bg-indigo-500/10 px-2.5 py-1.5 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-colors"
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          <span>প্রুফ স্ক্রিনশট</span>
+                        </button>
+                      ) : (
+                        <div />
+                      )}
+
                       <button
                         type="button"
-                        onClick={() => setPreviewScreenshotUrl(report.screenshotUrl || null)}
-                        className="flex items-center gap-1.5 text-[11px] text-indigo-300 hover:text-indigo-200 bg-indigo-500/10 px-2 py-1 rounded-lg border border-indigo-500/20 hover:border-indigo-500/40 transition-colors"
+                        onClick={() => setActiveReportModalId(report.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 hover:text-white rounded-lg border border-rose-500/40 text-xs font-bold transition-all active:scale-95"
                       >
-                        <ImageIcon className="w-3.5 h-3.5" />
-                        <span>প্রুফ স্ক্রিনশট দেখুন</span>
+                        <MessageSquare className="w-3.5 h-3.5 text-rose-300" />
+                        <span>💬 আলোচনা ও রিপ্লাই দিন {replyCount > 0 ? `(${replyCount})` : ''}</span>
                       </button>
                     </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -640,6 +732,90 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
           })}
         </div>
       </div>
+
+      {/* User's Submitted Reports & Discussion Tracker */}
+      {mySubmittedReports.length > 0 && (
+        <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-4 sm:p-6 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-indigo-400" />
+              <h3 className="text-sm sm:text-base font-bold text-white">
+                আপনার করা রিপোর্ট ও আলোচনাসমূহ ({mySubmittedReports.length}টি)
+              </h3>
+              {mySubmittedReports.some(r => r.unreadBy?.includes(currentUser.id)) && (
+                <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold animate-pulse">
+                  নতুন মেসেজ
+                </span>
+              )}
+            </div>
+            <span className="text-xs text-gray-400">
+              লিংক ওনার বা এডমিনের দেওয়া উত্তর দেখতে ক্লিক করুন
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {mySubmittedReports.map(report => {
+              const hasUnread = report.unreadBy?.includes(currentUser.id);
+              const repliesCount = report.replies ? report.replies.length : 0;
+              const lastReply = report.replies && report.replies.length > 0
+                ? report.replies[report.replies.length - 1]
+                : null;
+
+              return (
+                <div
+                  key={report.id}
+                  onClick={() => setActiveReportModalId(report.id)}
+                  className="p-3.5 bg-[#0E0E10] hover:bg-[#18181D] border border-[#1E1E20] hover:border-indigo-500/50 rounded-xl cursor-pointer transition-all space-y-2 group shadow-xs"
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold text-gray-200 group-hover:text-white truncate">
+                      লিংক #{report.targetLinkNumber} ({report.targetMemberName})
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      report.status === 'resolved'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : report.status === 'in_discussion'
+                        ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                    }`}>
+                      {report.status === 'resolved' ? '✓ সমাধান' : report.status === 'in_discussion' ? '💬 আলোচনা চলছে' : '⏳ পেন্ডিং'}
+                    </span>
+                  </div>
+
+                  {report.reasons && report.reasons.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {report.reasons.map((rs, i) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-[#16161A] text-gray-300 font-medium">
+                          {rs}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {lastReply && (
+                    <div className="text-[11px] text-gray-400 bg-[#141418] p-2 rounded-lg border border-white/5 line-clamp-1">
+                      <span className="text-white font-semibold">{lastReply.senderName}:</span> "{lastReply.message}"
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[#1E1E20] text-[11px]">
+                    <span className="text-gray-500 text-[10px]">
+                      {report.createdAt.split('T')[0]}
+                    </span>
+                    <span className="text-indigo-400 font-bold flex items-center gap-1 group-hover:underline">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>{repliesCount > 0 ? `${repliesCount}টি মেসেজ` : 'রিপ্লাই দিন'}</span>
+                      {hasUnread && (
+                        <span className="w-2 h-2 rounded-full bg-rose-500 inline-block animate-pulse" />
+                      )}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Earned Badges & Community Gamification */}
       <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-4 sm:p-6 shadow-xs space-y-3">

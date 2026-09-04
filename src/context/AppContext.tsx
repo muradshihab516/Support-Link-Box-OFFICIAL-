@@ -105,7 +105,12 @@ interface AppContextType {
   issueNotice: (typeOrTitle: any, titleOrMessage: string, messageOrType?: any, targetMemberId?: string) => void;
   deleteNotice: (noticeId: string) => void;
 
-  // Reports
+  // Reports & Reply Conversation
+  addReportReply: (reportId: string, message: string, screenshotUrl?: string) => { success: boolean; message: string };
+  updateReportStatus: (reportId: string, status: ReportStatus, note?: string) => void;
+  markReportRead: (reportId: string) => void;
+  activeReportModalId: string | null;
+  setActiveReportModalId: (id: string | null) => void;
   resolveReport: (reportId: string, statusOrNotes?: string, adminNotes?: string) => void;
   dismissReport: (reportId: string, adminNotes: string) => void;
   deleteReport: (reportId: string) => void;
@@ -256,6 +261,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [selectedDate] = useState<string>(TODAY);
+  const [activeReportModalId, setActiveReportModalId] = useState<string | null>(null);
 
   // Sync back to localStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members)); }, [members]);
@@ -621,6 +627,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       reporterId: currentUser.id,
       reporterName: currentUser.name,
       reporterUsername: currentUser.username,
+      reporterAvatar: currentUser.avatar,
       category,
       reasons: reasons && reasons.length > 0 ? reasons : undefined,
       description,
@@ -629,17 +636,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       targetMemberId: finalTargetMemberId,
       targetMemberName,
       screenshotUrl,
-      status: 'open',
+      status: 'pending',
       createdAt: new Date().toLocaleString('bn-BD', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' }),
-      communityId: currentCommunityId
+      communityId: currentCommunityId,
+      replies: [],
+      unreadBy: finalTargetMemberId ? [finalTargetMemberId] : []
     };
 
     setReports(prev => [newReport, ...prev]);
 
-    // Send immediate high-priority warning notification to the link owner
+    // Send immediate high-priority warning notification to the link owner and admins
+    const notifsToAdd: AppNotification[] = [];
+    const reasonSummary = (reasons && reasons.length > 0) ? reasons.join(', ') : (description || 'সমস্যা রিপোর্ট করা হয়েছে');
+
     if (finalTargetMemberId && finalTargetMemberId !== currentUser.id) {
-      const reasonSummary = (reasons && reasons.length > 0) ? reasons.join(', ') : (description || 'সমস্যা রিপোর্ট করা হয়েছে');
-      const ownerNotif: AppNotification = {
+      notifsToAdd.push({
         id: `notif_${Date.now()}_rep_owner`,
         userId: finalTargetMemberId,
         type: 'warning',
@@ -647,10 +658,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         message: `${currentUser.name} সমস্যা জানিয়েছেন: ${reasonSummary}`,
         timestamp: 'এইমাত্র',
         read: false,
-        actionUrl: 'dashboard'
-      };
-      setNotifications(prev => [ownerNotif, ...prev]);
+        actionUrl: 'dashboard',
+        reportId: newReport.id
+      });
     }
+
+    // Admin notification
+    notifsToAdd.push({
+      id: `notif_${Date.now()}_rep_admin`,
+      userId: 'all',
+      type: 'warning',
+      title: targetLinkNumber ? `🚩 লিংক #${targetLinkNumber}-এ রিপোর্ট: ${currentUser.name}` : `🚩 নতুন রিপোর্ট: ${currentUser.name}`,
+      message: `${targetMemberName || 'সদস্য'}-এর লিংকে সমস্যা: ${reasonSummary}`,
+      timestamp: 'এইমাত্র',
+      read: false,
+      actionUrl: 'admin/reports',
+      reportId: newReport.id
+    });
+
+    setNotifications(prev => [...notifsToAdd, ...prev]);
 
     return { success: true, message: '✓ সমস্যা রিপোর্ট সফলভাবে সাবমিট হয়েছে। লিংক দাতা ও এডমিনকে অবহিত করা হয়েছে।' };
   };
@@ -885,7 +911,163 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotices(prev => prev.filter(n => n.id !== noticeId));
   };
 
-  // Reports
+  // Reports & Reply Conversation
+  const addReportReply = (reportId: string, message: string, screenshotUrl?: string) => {
+    if (!currentUser) return { success: false, message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' };
+    if (!message.trim() && !screenshotUrl) {
+      return { success: false, message: 'একটি বার্তা বা স্ক্রিনশট প্রদান করুন।' };
+    }
+
+    const report = reports.find(r => r.id === reportId);
+    if (!report) return { success: false, message: 'রিপোর্টটি পাওয়া যায়নি।' };
+
+    // Permission check: Only reporter, target member (link owner), or admin/moderator can reply
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'moderator';
+    const isOwner = currentUser.id === report.targetMemberId;
+    const isReporter = currentUser.id === report.reporterId;
+
+    if (!isAdmin && !isOwner && !isReporter) {
+      return { success: false, message: 'এই রিপোর্টে রিপ্লাই দেওয়ার অনুমতি আপনার নেই।' };
+    }
+
+    let senderRole: 'reporter' | 'link_owner' | 'admin' | 'moderator' = 'reporter';
+    if (isAdmin) senderRole = currentUser.role === 'moderator' ? 'moderator' : 'admin';
+    else if (isOwner) senderRole = 'link_owner';
+
+    const newReply = {
+      id: `rep_r_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      reportId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderUsername: currentUser.username,
+      senderAvatar: currentUser.avatar,
+      senderRole,
+      message: message.trim(),
+      screenshotUrl,
+      createdAt: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+    };
+
+    // Calculate unread recipients (everyone in the thread except sender)
+    const unreadSet = new Set<string>(report.unreadBy || []);
+    unreadSet.delete(currentUser.id);
+
+    const notifsToAdd: AppNotification[] = [];
+    const truncatedMsg = message.length > 50 ? message.substring(0, 47) + '...' : message;
+
+    if (isOwner) {
+      // Link owner replied -> notify reporter and admins
+      unreadSet.add(report.reporterId);
+      notifsToAdd.push({
+        id: `notif_${Date.now()}_reply_to_rep`,
+        userId: report.reporterId,
+        type: 'report_reply',
+        title: `💬 লিংক দাতা (${currentUser.name}) রিপোর্টে রিপ্লাই দিয়েছেন`,
+        message: `"${truncatedMsg}" (লিংক #${report.targetLinkNumber || 'পোস্ট'})`,
+        timestamp: 'এইমাত্র',
+        read: false,
+        actionUrl: 'dashboard',
+        reportId
+      });
+    } else if (isReporter) {
+      // Reporter replied -> notify link owner
+      if (report.targetMemberId) {
+        unreadSet.add(report.targetMemberId);
+        notifsToAdd.push({
+          id: `notif_${Date.now()}_reply_to_owner`,
+          userId: report.targetMemberId,
+          type: 'report_reply',
+          title: `💬 রিপোর্টার (${currentUser.name}) রিপোর্টে রিপ্লাই দিয়েছেন`,
+          message: `"${truncatedMsg}" (লিংক #${report.targetLinkNumber || 'পোস্ট'})`,
+          timestamp: 'এইমাত্র',
+          read: false,
+          actionUrl: 'dashboard',
+          reportId
+        });
+      }
+    } else {
+      // Admin replied -> notify both link owner and reporter
+      unreadSet.add(report.reporterId);
+      notifsToAdd.push({
+        id: `notif_${Date.now()}_admin_to_rep`,
+        userId: report.reporterId,
+        type: 'report_reply',
+        title: `🛡️ এডমিন রিপোর্টে মেসেজ দিয়েছেন`,
+        message: `"${truncatedMsg}"`,
+        timestamp: 'এইমাত্র',
+        read: false,
+        actionUrl: 'dashboard',
+        reportId
+      });
+      if (report.targetMemberId) {
+        unreadSet.add(report.targetMemberId);
+        notifsToAdd.push({
+          id: `notif_${Date.now()}_admin_to_owner`,
+          userId: report.targetMemberId,
+          type: 'report_reply',
+          title: `🛡️ এডমিন আপনার লিংকের রিপোর্টে মেসেজ দিয়েছেন`,
+          message: `"${truncatedMsg}"`,
+          timestamp: 'এইমাত্র',
+          read: false,
+          actionUrl: 'dashboard',
+          reportId
+        });
+      }
+    }
+
+    if (notifsToAdd.length > 0) {
+      setNotifications(prev => [...notifsToAdd, ...prev]);
+    }
+
+    // Update report: automatically update status from pending/open to in_discussion
+    setReports(prev => prev.map(r => {
+      if (r.id === reportId) {
+        const existingReplies = r.replies || [];
+        const nextStatus: ReportStatus = (r.status === 'open' || r.status === 'pending') ? 'in_discussion' : r.status;
+        return {
+          ...r,
+          status: nextStatus,
+          updatedAt: new Date().toISOString(),
+          unreadBy: Array.from(unreadSet),
+          replies: [...existingReplies, newReply]
+        };
+      }
+      return r;
+    }));
+
+    addAuditLog('REPORT_REPLY', 'report', reportId, report.targetMemberName || 'Report', `${currentUser.name} (${senderRole}) added a reply`);
+
+    return { success: true, message: '✓ আপনার রিপ্লাই সফলভাবে পাঠানো হয়েছে!' };
+  };
+
+  const updateReportStatus = (reportId: string, status: ReportStatus, note?: string) => {
+    setReports(prev => prev.map(r => {
+      if (r.id === reportId) {
+        return {
+          ...r,
+          status,
+          adminNotes: note !== undefined ? note : r.adminNotes,
+          resolvedBy: (status === 'resolved' || status === 'dismissed') ? (currentUser?.name || 'Admin') : r.resolvedBy,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return r;
+    }));
+    addAuditLog('UPDATE_REPORT_STATUS', 'report', reportId, reportId, `Status updated to ${status}`);
+  };
+
+  const markReportRead = (reportId: string) => {
+    if (!currentUser) return;
+    setReports(prev => prev.map(r => {
+      if (r.id === reportId && r.unreadBy && r.unreadBy.includes(currentUser.id)) {
+        return {
+          ...r,
+          unreadBy: r.unreadBy.filter(uid => uid !== currentUser.id)
+        };
+      }
+      return r;
+    }));
+  };
+
   const resolveReport = (reportId: string, statusOrNotes?: string, maybeNotes?: string) => {
     let finalStatus: ReportStatus = 'resolved';
     let finalNotes = '';
@@ -1259,6 +1441,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         issueNotice,
         deleteNotice,
 
+        // Reports & Reply Conversation
+        addReportReply,
+        updateReportStatus,
+        markReportRead,
+        activeReportModalId,
+        setActiveReportModalId,
         resolveReport,
         dismissReport,
         deleteReport,

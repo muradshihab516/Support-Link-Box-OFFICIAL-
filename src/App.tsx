@@ -12,12 +12,49 @@ import { FreeToolsHub } from './components/tools/FreeToolsHub';
 import { AdminLayout } from './components/admin/AdminLayout';
 import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { ReportModal } from './components/member/ReportModal';
+import { ReportConversationModal } from './components/member/ReportConversationModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
+const getInitialView = (): string => {
+  try {
+    const hash = window.location.hash.replace('#', '');
+    if (hash && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin'].includes(hash)) {
+      return hash;
+    }
+    const saved = localStorage.getItem('slb_current_view');
+    if (saved && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin'].includes(saved)) {
+      return saved;
+    }
+  } catch {}
+  return 'daily_links';
+};
+
 const AppContent: React.FC = () => {
-  const { currentMember } = useApp();
-  const [currentView, setCurrentView] = useState<string>('dashboard');
+  const { currentMember, activeReportModalId, setActiveReportModalId } = useApp();
+  const [currentView, setCurrentViewState] = useState<string>(getInitialView);
+
+  const setCurrentView = (view: string) => {
+    setCurrentViewState(view);
+    try {
+      localStorage.setItem('slb_current_view', view);
+      window.location.hash = view;
+    } catch {}
+  };
+
+  React.useEffect(() => {
+    const handleHashChange = () => {
+      try {
+        const hash = window.location.hash.replace('#', '');
+        if (hash && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin'].includes(hash)) {
+          setCurrentViewState(hash);
+          localStorage.setItem('slb_current_view', hash);
+        }
+      } catch {}
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   
   // Modals state
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -136,6 +173,13 @@ const AppContent: React.FC = () => {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
       />
+
+      {activeReportModalId && (
+        <ReportConversationModal
+          reportId={activeReportModalId}
+          onClose={() => setActiveReportModalId(null)}
+        />
+      )}
     </div>
   );
 };
