@@ -251,7 +251,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [settings, setSettings] = useState<SystemSettings>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const minDwell = (!parsed.minSupportDwellSeconds || parsed.minSupportDwellSeconds === 15) ? 7 : parsed.minSupportDwellSeconds;
+        const videoDwell = (!parsed.videoSupportDwellSeconds || parsed.videoSupportDwellSeconds === 25) ? 8 : parsed.videoSupportDwellSeconds;
+        return {
+          ...INITIAL_SETTINGS,
+          ...parsed,
+          minSupportDwellSeconds: minDwell,
+          videoSupportDwellSeconds: videoDwell
+        };
+      } catch {
+        return INITIAL_SETTINGS;
+      }
+    }
+    return INITIAL_SETTINGS;
   });
 
   const [communities, setCommunities] = useState<Community[]>(() => {

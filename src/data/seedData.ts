@@ -99,6 +99,8 @@ export const INITIAL_SETTINGS: SystemSettings = {
   autoFreezeAfterDays: 3,
   minSupportRequiredPercent: 100,
   allowAutoUnfreezeOnSubmit: true,
+  minSupportDwellSeconds: 7,
+  videoSupportDwellSeconds: 8,
   enableAdSlots: true,
   enableSponsoredLeaderboard: true,
   enableFeaturedSponsors: true,

@@ -246,6 +246,36 @@ export const SettingsAdmin: React.FC = () => {
                 className="w-full px-3 py-2 text-xs bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-white font-mono focus:border-indigo-500"
               />
             </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                ফটো সাপোর্ট কাউন্টডাউন (সেকেন্ড)
+              </label>
+              <input
+                type="number"
+                min="3"
+                max="120"
+                value={form.minSupportDwellSeconds ?? 7}
+                onChange={e => setForm({ ...form, minSupportDwellSeconds: Math.max(3, Number(e.target.value)) })}
+                className="w-full px-3 py-2 text-xs bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-white font-mono focus:border-indigo-500"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">ডিফল্ট: ৭ সেকেন্ড</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">
+                ভিডিও সাপোর্ট কাউন্টডাউন (সেকেন্ড)
+              </label>
+              <input
+                type="number"
+                min="3"
+                max="180"
+                value={form.videoSupportDwellSeconds ?? 8}
+                onChange={e => setForm({ ...form, videoSupportDwellSeconds: Math.max(3, Number(e.target.value)) })}
+                className="w-full px-3 py-2 text-xs bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-white font-mono focus:border-indigo-500"
+              />
+              <p className="text-[10px] text-gray-500 mt-1">ডিফল্ট: ৮ সেকেন্ড</p>
+            </div>
           </div>
 
           <div className="pt-2">

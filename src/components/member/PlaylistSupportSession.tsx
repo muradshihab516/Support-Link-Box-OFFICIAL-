@@ -96,19 +96,15 @@ interface PendingSupportRecord {
   linkNumber: number;
   openedAt: number;
   fromIndex: number;
+  requiredDurationSec: number;
 }
 
-// Safeguard thresholds:
-// 1. LAUNCH_GRACE_PERIOD_MS (2500ms): When launching Facebook app/web from mobile Chrome,
-// the browser dispatches intent and temporarily blurs/focuses or fires visibilitychange during the
-// initial 0.1s - 2.5s launch animation. Any focus/visibility events during this window are browser
-// launch artifacts and MUST BE COMPLETELY IGNORED (never treated as user returning).
-const LAUNCH_GRACE_PERIOD_MS = 2500;
-
-// 2. MIN_FB_DWELL_TIME_MS (3500ms): Minimum realistic time to view and support a post on FB.
-// When returning after 3.5s+, auto-mark completes and advances.
-// If user returns between 2.5s and 3.5s, pending status is NEVER canceled — user can simply tap "ব্যাক এসেছি / সম্পন্ন".
-const MIN_FB_DWELL_TIME_MS = 3500;
+// Default minimum dwell times on Facebook (enforced via active countdown):
+// 7 seconds for regular / photo posts
+// 8 seconds for video posts
+// Admin can adjust these in Settings Admin
+const DEFAULT_PHOTO_DWELL_SECONDS = 7;
+const DEFAULT_VIDEO_DWELL_SECONDS = 8;
 
 export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
   initialLinkId,
@@ -118,6 +114,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
     currentUser, 
     dailyLinks, 
     reports,
+    settings,
     getTodaySupportStats, 
     markLinkSupported, 
     unmarkLinkSupported 
@@ -155,12 +152,32 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, boolean>>({});
 
   // Pending return state (strictly ONLY populated when member clicks "Support Now")
-  // If user switches apps due to a notification or incoming phone call, this remains NULL!
   const [pendingSupport, setPendingSupport] = useState<PendingSupportRecord | null>(null);
   const pendingSupportRef = useRef<PendingSupportRecord | null>(null);
 
+  // Active countdown seconds remaining
+  const [countdownRemaining, setCountdownRemaining] = useState<number>(0);
+
   useEffect(() => {
     pendingSupportRef.current = pendingSupport;
+  }, [pendingSupport]);
+
+  // Live timer countdown ticker for pending support
+  useEffect(() => {
+    if (!pendingSupport) {
+      setCountdownRemaining(0);
+      return;
+    }
+
+    const updateTimer = () => {
+      const elapsedSec = (Date.now() - pendingSupport.openedAt) / 1000;
+      const left = Math.max(0, Math.ceil(pendingSupport.requiredDurationSec - elapsedSec));
+      setCountdownRemaining(left);
+    };
+
+    updateTimer();
+    const timerInterval = setInterval(updateTimer, 250);
+    return () => clearInterval(timerInterval);
   }, [pendingSupport]);
 
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
@@ -352,40 +369,36 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
   }, [autoAdvance, sortedLinks, optimisticStatus, supportedSet, currentUser, markLinkSupported]);
 
   // =========================================================================
-  // SAFEGUARDED RETURN DETECTOR
-  // 1. pendingReturn is strictly active ONLY after clicking "Support Now"
-  // 2. LAUNCH_GRACE_PERIOD_MS (0-2.5s) ignores browser tab/intent launch transition events
-  // 3. User dwell time >= 3.5s automatically completes and advances
-  // 4. Returning earlier is NEVER canceled — button remains available to confirm manually
+  // SAFEGUARDED RETURN & COUNTDOWN DETECTOR
+  // 1. pendingSupport is strictly active ONLY after clicking "Support Now"
+  // 2. Requires full dwell time (15s for photo, 25s for video, or Admin setting)
+  // 3. Returning earlier (e.g. within 2 seconds) CANNOT complete the support!
+  //    It prompts member to spend required time on Facebook to like & comment.
+  // 4. Once countdown completes, auto-advance triggers on return or user can tap confirm.
   // =========================================================================
   useEffect(() => {
     const checkAndTriggerReturn = () => {
       const pending = pendingSupportRef.current;
-      // If user switched app for call/notification/SMS, pending is null and we do NOTHING!
       if (!pending) return;
 
-      const elapsed = Date.now() - pending.openedAt;
+      const elapsedSec = (Date.now() - pending.openedAt) / 1000;
+      const remainingSec = Math.max(0, Math.ceil(pending.requiredDurationSec - elapsedSec));
 
-      // 1. Launch Grace Period:
-      // When opening a link on mobile Chrome, the browser fires focus/visibilitychange events
-      // during the first 0.1 - 2.5 seconds as the new tab or Android Intent loads.
-      // This is browser transition noise — DO NOT treat it as user returning!
-      if (elapsed < LAUNCH_GRACE_PERIOD_MS) {
+      // 1. If user returned before the countdown completed (e.g. within 2 seconds):
+      // STRICTLY BLOCK COMPLETION! Show friendly alert and instruction.
+      if (remainingSec > 0) {
+        setStatusNotice({
+          type: 'warning',
+          message: `⏳ অনুগ্রহ করে ফেসবুকে পোস্টে লাইক ও কমেন্ট করুন! আর ${remainingSec} সেকেন্ড পর সাপোর্ট সম্পন্ন নিশ্চিত হবে।`
+        });
         return;
       }
 
-      // 2. Minimum Dwell Time (3.5s+):
-      // If user returns after spending adequate time on Facebook, automatically complete and advance!
-      if (elapsed >= MIN_FB_DWELL_TIME_MS) {
+      // 2. Countdown has completed (elapsedSec >= requiredDurationSec):
+      // If autoAdvance is enabled and user returns after the required duration, complete & advance!
+      if (autoAdvance) {
         completeSupportAndAdvance(pending.linkId, pending.linkNumber, pending.fromIndex);
-        return;
       }
-
-      // 3. Returned between 2.5s and 3.5s: Keep pending active so member can tap confirm
-      setStatusNotice({
-        type: 'info',
-        message: `⏳ ফেসবুকে পোস্ট সাপোর্ট সম্পন্ন হলে নিচে "ব্যাক এসেছি ▶" বাটনে চাপুন।`
-      });
     };
 
     const handleVisibilityChange = () => {
@@ -411,41 +424,64 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
       window.removeEventListener('focus', handleWindowFocus);
       window.removeEventListener('pageshow', handlePageShow);
     };
-  }, [completeSupportAndAdvance]);
+  }, [completeSupportAndAdvance, autoAdvance]);
 
-  // Restore pending session if page reloaded on return (with safeguard)
+  // Restore pending session if page reloaded on return (with duration safeguard)
   useEffect(() => {
     try {
       const saved = localStorage.getItem('slb_pending_support') || sessionStorage.getItem('slb_pending_support');
       if (saved) {
         const parsed = JSON.parse(saved) as PendingSupportRecord;
         if (parsed && parsed.linkId) {
-          const elapsed = Date.now() - parsed.openedAt;
-          if (elapsed >= MIN_FB_DWELL_TIME_MS && elapsed < 600000) {
-            completeSupportAndAdvance(parsed.linkId, parsed.linkNumber, parsed.fromIndex);
-          } else if (elapsed < MIN_FB_DWELL_TIME_MS) {
-            setPendingSupport(parsed);
-            pendingSupportRef.current = parsed;
-          } else {
+          const requiredSec = parsed.requiredDurationSec || DEFAULT_PHOTO_DWELL_SECONDS;
+          const elapsedSec = (Date.now() - parsed.openedAt) / 1000;
+          // If stored more than 15 minutes ago, consider stale and clean up
+          if (elapsedSec > 900) {
             localStorage.removeItem('slb_pending_support');
             sessionStorage.removeItem('slb_pending_support');
+          } else {
+            // Restore pending record without premature auto-completion
+            setPendingSupport(parsed);
+            pendingSupportRef.current = parsed;
           }
         }
       }
     } catch {}
-  }, [completeSupportAndAdvance]);
+  }, []);
 
-  // Fallback manual confirm: Instant completion when tapped by member
+  // Manual confirm: Validates countdown before allowing completion
   const handleManualReturnConfirm = () => {
     const pending = pendingSupportRef.current;
     if (!pending) return;
+
+    const elapsedSec = (Date.now() - pending.openedAt) / 1000;
+    const remainingSec = Math.max(0, Math.ceil(pending.requiredDurationSec - elapsedSec));
+
+    if (remainingSec > 0) {
+      setStatusNotice({
+        type: 'warning',
+        message: `⚠️ সময় বাকি আছে! ফেসবুকে পোস্টে লাইক ও কমেন্ট করুন (আর ${remainingSec} সেকেন্ড বাকি)।`
+      });
+      return;
+    }
+
     completeSupportAndAdvance(pending.linkId, pending.linkNumber, pending.fromIndex);
+  };
+
+  // Explicit cancel pending support countdown
+  const handleCancelPending = () => {
+    cancelPendingReturnIfAny();
+    setStatusNotice({
+      type: 'info',
+      message: 'ℹ️ সাপোর্ট কাউন্টডাউন বাতিল করা হয়েছে।'
+    });
+    setTimeout(() => setStatusNotice(null), 3000);
   };
 
   // =========================================================================
   // CORE LINK LAUNCH ENGINE
   // Own link: Opens so member can verify post
-  // Peer link: Opens & initiates pending return tracking
+  // Peer link: Opens & initiates pending countdown tracking
   // =========================================================================
   const handleLaunchSupport = (modeToUse: 'app' | 'web') => {
     if (!activeLink) return;
@@ -465,7 +501,11 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
       return;
     }
 
-    // Not own link: Launch & initiate Go -> Return tracking
+    // Determine dwell duration based on post type and admin settings:
+    const requiredDurationSec = activeLink.postType === 'video'
+      ? (settings?.videoSupportDwellSeconds || DEFAULT_VIDEO_DWELL_SECONDS)
+      : (settings?.minSupportDwellSeconds || DEFAULT_PHOTO_DWELL_SECONDS);
+
     const currentLinkId = activeLink.id;
     const currentLinkNum = activeLink.linkNumber;
 
@@ -475,11 +515,14 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
       linkId: currentLinkId,
       linkNumber: currentLinkNum,
       openedAt: Date.now(),
-      fromIndex: currentIndex
+      fromIndex: currentIndex,
+      requiredDurationSec
     };
 
     setPendingSupport(newPending);
     pendingSupportRef.current = newPending;
+    setCountdownRemaining(requiredDurationSec);
+
     try {
       localStorage.setItem('slb_pending_support', JSON.stringify(newPending));
       sessionStorage.setItem('slb_pending_support', JSON.stringify(newPending));
@@ -487,7 +530,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
 
     setStatusNotice({
       type: 'info',
-      message: `⏳ লিংক #${currentLinkNum} ফেসবুকে ওপেন হয়েছে... সাপোর্ট করে ফিরে আসুন!`
+      message: `⏳ লিংক #${currentLinkNum} ফেসবুকে ওপেন হয়েছে! পোস্টে লাইক ও কমেন্ট করে ${requiredDurationSec} সেকেন্ড অপেক্ষা করুন।`
     });
     setTimeout(() => setStatusNotice(null), 5000);
   };
@@ -937,27 +980,123 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
                     </button>
                   </>
                 ) : pendingSupport?.linkId === activeLink.id ? (
-                  /* Waiting for user to return from Facebook */
-                  <div className="flex-1 p-2 sm:p-2.5 bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-amber-500/20 border border-amber-500/40 rounded-xl flex items-center justify-between gap-2 shadow-lg">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
-                      <div className="min-w-0">
-                        <div className="text-xs font-black text-amber-200 truncate">
-                          ফেসবুকে পোস্ট ওপেন হয়েছে...
-                        </div>
-                        <div className="text-[11px] text-amber-300/80 truncate">
-                          ৪-৫ সে. লাইক/কমেন্ট শেষে ব্যাক আসলেই অটো-মার্ক হবে!
+                  /* Active Pending Support Countdown / Confirmation Card */
+                  <div className={`flex-1 p-2 sm:p-2.5 rounded-xl border transition-all duration-300 shadow-xl ${
+                    countdownRemaining > 0 
+                      ? 'bg-gradient-to-r from-amber-500/15 via-[#16161F] to-amber-500/10 border-amber-500/35'
+                      : 'bg-gradient-to-r from-emerald-500/20 via-[#16161F] to-emerald-500/15 border-emerald-500/40'
+                  }`}>
+                    <div className="flex flex-col xs:flex-row items-stretch xs:items-center justify-between gap-2.5">
+                      {/* Left: Animated Status & Timer */}
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {countdownRemaining > 0 ? (
+                          <div className="relative w-9 h-9 shrink-0 flex items-center justify-center">
+                            <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                              <path
+                                className="text-gray-800 stroke-current"
+                                strokeWidth="3.5"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                              <path
+                                className="text-amber-400 stroke-current transition-all duration-300"
+                                strokeDasharray={`${Math.round(((pendingSupport.requiredDurationSec - countdownRemaining) / pendingSupport.requiredDurationSec) * 100)}, 100`}
+                                strokeWidth="3.5"
+                                strokeLinecap="round"
+                                fill="none"
+                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                              />
+                            </svg>
+                            <span className="absolute font-mono font-black text-xs text-amber-300">
+                              {countdownRemaining}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
+                            <Check className="w-5 h-5 text-emerald-400" />
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <div className="text-xs font-black flex items-center gap-1.5 truncate">
+                            {countdownRemaining > 0 ? (
+                              <>
+                                <span className="text-amber-300">⏳ ফেসবুকে সাপোর্ট চলছে...</span>
+                                <span className="font-mono text-amber-400 text-[10px] bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/25">
+                                  {countdownRemaining}s বাকি
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-emerald-300 flex items-center gap-1">
+                                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                                সময় সম্পন্ন হয়েছে! সাপোর্ট নিশ্চিত করুন
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-gray-400 truncate mt-0.5">
+                            {countdownRemaining > 0 
+                              ? `পোস্টে লাইক ও কমেন্ট দিন। সময় পূর্ণ হওয়া পর্যন্ত অপেক্ষা করুন।`
+                              : `লাইক/কমেন্ট শেষে কনফার্ম করতে বাটনে চাপুন।`}
+                          </div>
                         </div>
                       </div>
+
+                      {/* Right: Action Buttons */}
+                      <div className="flex items-center gap-1.5 shrink-0 justify-end">
+                        {countdownRemaining > 0 ? (
+                          <>
+                            {/* Disabled waiting indicator */}
+                            <button
+                              disabled
+                              className="px-3 py-1.5 bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold rounded-lg flex items-center gap-1.5 cursor-not-allowed opacity-90"
+                              title={`কাউন্টডাউন চলছে: আর ${countdownRemaining} সেকেন্ড অপেক্ষা করুন`}
+                            >
+                              <Clock className="w-3 h-3 animate-spin" />
+                              <span>অপেক্ষা ({countdownRemaining}s)</span>
+                            </button>
+
+                            {/* Re-open FB button */}
+                            <button
+                              onClick={() => handleLaunchSupport(openMode)}
+                              className="p-1.5 bg-[#20202A] hover:bg-[#282836] border border-gray-700 text-gray-300 hover:text-white rounded-lg text-xs transition-colors"
+                              title="ফেসবুক পেজ আবার খুলুন"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Cancel button */}
+                            <button
+                              onClick={handleCancelPending}
+                              className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 hover:text-rose-200 rounded-lg text-xs transition-colors"
+                              title="কাউন্টডাউন বাতিল করুন"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* Ready to Confirm Button */}
+                            <button
+                              onClick={handleManualReturnConfirm}
+                              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-xs font-black rounded-lg shadow-lg shadow-emerald-600/30 flex items-center gap-1.5 active:scale-95 transition-all animate-pulse"
+                              title="সাপোর্ট নিশ্চিত করে পরবর্তী লিংকে এগিয়ে যান"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>সাপোর্ট সম্পন্ন করেছি ▶</span>
+                            </button>
+
+                            {/* Cancel button */}
+                            <button
+                              onClick={handleCancelPending}
+                              className="p-2 bg-[#20202A] hover:bg-[#282836] border border-gray-700 text-gray-400 hover:text-white rounded-lg text-xs transition-colors"
+                              title="বাতিল করুন"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <button
-                      onClick={handleManualReturnConfirm}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-lg shadow-md flex items-center gap-1 shrink-0 active:scale-95 transition-all"
-                      title="৪-৫ সেকেন্ড পর ব্যাক এসে অটো-মার্ক না হলে এখানে চাপুন"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>ব্যাক এসেছি ▶</span>
-                    </button>
                   </div>
                 ) : isActiveSupported ? (
                   /* Already supported status */

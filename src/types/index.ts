@@ -278,6 +278,8 @@ export interface SystemSettings {
   autoFreezeAfterDays: number;
   minSupportRequiredPercent: number;
   allowAutoUnfreezeOnSubmit: boolean;
+  minSupportDwellSeconds?: number; // e.g. 15 seconds minimum for photo posts
+  videoSupportDwellSeconds?: number; // e.g. 25 seconds minimum for video posts
   enableAdSlots: boolean;
   enableSponsoredLeaderboard: boolean;
   enableFeaturedSponsors: boolean;
