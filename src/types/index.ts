@@ -68,6 +68,34 @@ export interface Member {
 
 export type PostContentType = 'photo' | 'video';
 export type LinkCategoryType = 'member' | 'admin' | 'vip' | 'notice';
+export type ScheduleStatus = 'scheduled' | 'processing' | 'submitted' | 'cancelled' | 'failed';
+
+export interface ScheduledLink {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberAvatar: string;
+  memberUsername: string;
+  postUrl: string;
+  caption?: string;
+  postType: PostContentType;
+  instruction?: string;
+  category?: LinkCategoryType;
+  scheduledForDate: string; // YYYY-MM-DD
+  scheduledForTime: string; // HH:mm (e.g. "12:00", "14:30")
+  scheduledForTimestamp: number; // Epoch ms when the backend triggers release
+  status: ScheduleStatus;
+  createdAt: string; // Human or ISO
+  createdAtTimestamp: number;
+  submittedAt?: string;
+  submittedDailyLinkId?: string;
+  assignedLinkNumber?: number;
+  cancellationReason?: string;
+  scheduledByAdminId?: string;
+  scheduledByAdminName?: string;
+  isScheduledByAdmin?: boolean;
+  communityId: string;
+}
 
 export interface DailyLink {
   id: string;
@@ -307,6 +335,10 @@ export interface SystemSettings {
   enableSponsoredLeaderboard: boolean;
   enableFeaturedSponsors: boolean;
   theme: 'light' | 'dark' | 'system';
+  scheduleEnabled?: boolean;
+  scheduleStartHourOffset?: number; // default 2 hours after opening (e.g. 10:00 -> 12:00)
+  scheduleAllowedStartTime?: string; // default "12:00"
+  scheduleAllowedEndTime?: string; // default "16:50"
 }
 
 export interface RevenueRecord {

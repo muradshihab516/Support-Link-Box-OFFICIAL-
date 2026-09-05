@@ -27,10 +27,12 @@ import {
   Bell,
   Edit3,
   Trash2,
-  Lock
+  Lock,
+  Calendar
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { LinkEditModal } from './LinkEditModal';
+import { ScheduledLinksModal } from './ScheduledLinksModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
 import { PlaylistSupportSession } from './PlaylistSupportSession';
 import { ReportModal } from './ReportModal';
@@ -52,6 +54,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
     currentUser, 
     dailyLinks, 
     reports,
+    scheduledLinks,
     getTodaySupportStats, 
     markLinkSupported, 
     unmarkLinkSupported,
@@ -65,6 +68,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const [editingLink, setEditingLink] = useState<DailyLink | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showScheduledModal, setShowScheduledModal] = useState(false);
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
   const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string; number?: number; memberId?: string; url?: string } | null>(null);
 
@@ -301,6 +305,21 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
           >
             <Play className="w-4 h-4 fill-white" />
             <span>▶ প্লেলিস্ট সাপোর্ট সেশন</span>
+          </button>
+
+          {/* Scheduled Links Button */}
+          <button
+            onClick={() => setShowScheduledModal(true)}
+            className="px-3.5 py-2.5 bg-[#141418] hover:bg-[#1E1E24] border border-[#24242E] hover:border-indigo-500/40 text-indigo-300 hover:text-white text-xs sm:text-sm font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+            title="শিডিউল করা লিংকসমূহ দেখুন ও পরিচালনা করুন"
+          >
+            <Calendar className="w-4 h-4 text-indigo-400" />
+            <span>শিডিউল তালিকা</span>
+            {scheduledLinks.filter(s => (isAdmin || s.memberId === currentUser?.id) && s.status === 'scheduled').length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-bold">
+                {scheduledLinks.filter(s => (isAdmin || s.memberId === currentUser?.id) && s.status === 'scheduled').length}
+              </span>
+            )}
           </button>
 
           {currentUser && !stats?.hasSubmittedToday ? (
@@ -846,6 +865,16 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
         allLinks={eligibleLinks}
         onSelectLink={link => setSelectedPostForInAppView(link)}
         onReportLink={(linkId, name) => setReportTarget({ linkId, name })}
+      />
+
+      {/* Scheduled Links Modal */}
+      <ScheduledLinksModal
+        isOpen={showScheduledModal}
+        onClose={() => setShowScheduledModal(false)}
+        onOpenScheduleNew={() => {
+          setShowScheduledModal(false);
+          setShowSubmitModal(true);
+        }}
       />
 
       {/* Submission Modal */}

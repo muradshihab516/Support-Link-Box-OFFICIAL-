@@ -101,6 +101,120 @@ CREATE INDEX idx_daily_links_date ON public.daily_links(date);
 CREATE INDEX idx_daily_links_member ON public.daily_links(member_id);
 
 -- ------------------------------------------------------------------------
+-- 5.1 SCHEDULED LINKS (Future & Advance Submissions)
+-- ------------------------------------------------------------------------
+CREATE TYPE schedule_status_enum AS ENUM ('scheduled', 'processing', 'submitted', 'cancelled', 'failed');
+
+CREATE TABLE IF NOT EXISTS public.scheduled_links (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    member_id UUID NOT NULL REFERENCES public.members(id) ON DELETE CASCADE,
+    facebook_post_url TEXT NOT NULL,
+    post_type TEXT DEFAULT 'photo',
+    caption TEXT,
+    instruction TEXT DEFAULT 'React + Comment',
+    category TEXT DEFAULT 'member',
+    scheduled_for_date DATE NOT NULL,
+    scheduled_for_time TIME NOT NULL,
+    scheduled_for_timestamp BIGINT NOT NULL,
+    status schedule_status_enum DEFAULT 'scheduled',
+    cancellation_reason TEXT,
+    assigned_link_number INT,
+    submitted_daily_link_id UUID REFERENCES public.daily_links(id) ON DELETE SET NULL,
+    is_scheduled_by_admin BOOLEAN DEFAULT FALSE,
+    scheduled_by_admin_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_member_scheduled_date UNIQUE (scheduled_for_date, member_id, status)
+);
+
+CREATE INDEX idx_scheduled_links_timestamp ON public.scheduled_links(scheduled_for_timestamp) WHERE status = 'scheduled';
+CREATE INDEX idx_scheduled_links_member ON public.scheduled_links(member_id);
+CREATE INDEX idx_scheduled_links_date ON public.scheduled_links(scheduled_for_date);
+
+-- Procedure to process due scheduled links (called via pg_cron or Edge Function every minute)
+CREATE OR REPLACE FUNCTION public.process_due_scheduled_links()
+RETURNS void AS $$
+DECLARE
+    sched RECORD;
+    target_member RECORD;
+    next_num INT;
+    part_num INT;
+    new_daily_link_id UUID;
+    now_ms BIGINT := (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT;
+BEGIN
+    FOR sched IN
+        SELECT * FROM public.scheduled_links
+        WHERE status = 'scheduled' AND scheduled_for_timestamp <= now_ms
+        FOR UPDATE SKIP LOCKED
+    LOOP
+        -- 1. Check member status: Must not be frozen, suspended, or removed
+        SELECT * INTO target_member FROM public.members WHERE id = sched.member_id;
+        IF NOT FOUND OR target_member.status IN ('frozen', 'suspended', 'removed') THEN
+            UPDATE public.scheduled_links
+            SET status = 'cancelled',
+                cancellation_reason = 'Member is inactive or removed by admin',
+                updated_at = NOW()
+            WHERE id = sched.id;
+            CONTINUE;
+        END IF;
+
+        -- 2. Check if member already has a submission on that date
+        IF EXISTS (SELECT 1 FROM public.daily_links WHERE member_id = sched.member_id AND date = sched.scheduled_for_date) THEN
+            UPDATE public.scheduled_links
+            SET status = 'cancelled',
+                cancellation_reason = 'Member already has a submission for this date',
+                updated_at = NOW()
+            WHERE id = sched.id;
+            CONTINUE;
+        END IF;
+
+        -- 3. Atomically calculate next serial number at the exact moment of execution
+        SELECT COALESCE(MAX(link_number), 0) + 1 INTO next_num
+        FROM public.daily_links
+        WHERE date = sched.scheduled_for_date;
+
+        part_num := GREATEST(1, CEIL(next_num::NUMERIC / 20.0));
+
+        -- 4. Insert into daily_links
+        INSERT INTO public.daily_links (
+            link_number,
+            date,
+            week_number,
+            member_id,
+            facebook_post_url,
+            instruction,
+            submitted_at,
+            created_at
+        ) VALUES (
+            next_num,
+            sched.scheduled_for_date,
+            1,
+            sched.member_id,
+            sched.facebook_post_url,
+            COALESCE(sched.instruction, 'React + Comment'),
+            NOW(),
+            NOW()
+        ) RETURNING id INTO new_daily_link_id;
+
+        -- 5. Mark scheduled link as submitted
+        UPDATE public.scheduled_links
+        SET status = 'submitted',
+            assigned_link_number = next_num,
+            submitted_daily_link_id = new_daily_link_id,
+            updated_at = NOW()
+        WHERE id = sched.id;
+
+        -- 6. Update member stats
+        UPDATE public.members
+        SET total_links = total_links + 1,
+            last_active = sched.scheduled_for_date,
+            status = 'active'
+        WHERE id = sched.member_id;
+    END LOOP;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ------------------------------------------------------------------------
 -- 6. SUPPORT RECORDS (Tracking Member Support on Links)
 -- ------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.support_records (
@@ -307,6 +421,33 @@ ON public.support_records FOR SELECT USING (true);
 CREATE POLICY "Members can mark own support"
 ON public.support_records FOR INSERT WITH CHECK (
     auth.uid() IN (SELECT user_id FROM public.members WHERE id = supporter_member_id)
+    OR public.is_admin()
+);
+
+-- 4.1 Scheduled Links RLS
+ALTER TABLE public.scheduled_links ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Members can view own scheduled links, admins view all"
+ON public.scheduled_links FOR SELECT USING (
+    auth.uid() IN (SELECT user_id FROM public.members WHERE id = member_id)
+    OR public.is_admin()
+);
+
+CREATE POLICY "Members can create own scheduled links"
+ON public.scheduled_links FOR INSERT WITH CHECK (
+    auth.uid() IN (SELECT user_id FROM public.members WHERE id = member_id)
+    OR public.is_admin()
+);
+
+CREATE POLICY "Members can update own scheduled links before submission"
+ON public.scheduled_links FOR UPDATE USING (
+    (auth.uid() IN (SELECT user_id FROM public.members WHERE id = member_id) AND status = 'scheduled')
+    OR public.is_admin()
+);
+
+CREATE POLICY "Members can cancel own scheduled links"
+ON public.scheduled_links FOR DELETE USING (
+    (auth.uid() IN (SELECT user_id FROM public.members WHERE id = member_id) AND status = 'scheduled')
     OR public.is_admin()
 );
 

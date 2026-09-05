@@ -12,7 +12,8 @@ import {
   Community, 
   SystemSettings, 
   RevenueRecord,
-  Badge
+  Badge,
+  ScheduledLink
 } from '../types';
 
 export const INITIAL_BADGES: Badge[] = [
@@ -104,7 +105,11 @@ export const INITIAL_SETTINGS: SystemSettings = {
   enableAdSlots: true,
   enableSponsoredLeaderboard: true,
   enableFeaturedSponsors: true,
-  theme: 'light'
+  theme: 'light',
+  scheduleEnabled: true,
+  scheduleStartHourOffset: 2, // default 2 hours after opening (10:00 + 2h = 12:00 PM)
+  scheduleAllowedStartTime: '12:00',
+  scheduleAllowedEndTime: '16:50'
 };
 
 const AVATARS = [
@@ -1763,5 +1768,66 @@ export const INITIAL_REVENUE: RevenueRecord[] = [
     period: '2026-08',
     date: '2026-08-20',
     note: 'Affiliate commission payouts'
+  }
+];
+
+// Initial Scheduled Links
+export const INITIAL_SCHEDULED_LINKS: ScheduledLink[] = [
+  {
+    id: 'sched_1',
+    memberId: 'user_emon',
+    memberName: 'Md Emon',
+    memberAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    memberUsername: 'emon123',
+    postUrl: 'https://facebook.com/mdemon.creator/posts/89123456789',
+    caption: 'মোবাইল দিয়ে প্রফেশনাল ফটো এডিটিং সিক্রেট ট্রিকস! অবশ্যই ফুল ভিডিও দেখবেন 🔥',
+    postType: 'video',
+    instruction: 'ফুল ভিডিও দেখে রিয়েক্ট ও গঠনমূলক মতামত কমেন্ট করুন',
+    category: 'member',
+    scheduledForDate: '2026-08-28',
+    scheduledForTime: '12:30',
+    scheduledForTimestamp: new Date('2026-08-28T12:30:00+06:00').getTime(),
+    status: 'scheduled',
+    createdAt: '2026-08-27 10:45 PM',
+    createdAtTimestamp: new Date('2026-08-27T22:45:00+06:00').getTime(),
+    communityId: 'comm_default'
+  },
+  {
+    id: 'sched_2',
+    memberId: 'user_farhana',
+    memberName: 'Farhana Akter',
+    memberAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    memberUsername: 'farhana_akter',
+    postUrl: 'https://facebook.com/farhana.lifestyle/posts/44556677889',
+    caption: 'আমার নতুন ক্যালিগ্রাফি আর্টওয়ার্ক! কেমন লাগলো সবাই জানাবেন 🎨❤️',
+    postType: 'photo',
+    instruction: 'লাভ রিয়েক্ট ও আপনার পছন্দের কমেন্ট করুন',
+    category: 'member',
+    scheduledForDate: '2026-08-28',
+    scheduledForTime: '14:00',
+    scheduledForTimestamp: new Date('2026-08-28T14:00:00+06:00').getTime(),
+    status: 'scheduled',
+    createdAt: '2026-08-28 01:15 AM',
+    createdAtTimestamp: new Date('2026-08-28T01:15:00+06:00').getTime(),
+    communityId: 'comm_default'
+  },
+  {
+    id: 'sched_3',
+    memberId: 'user_siam',
+    memberName: 'Siam Ahmed',
+    memberAvatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
+    memberUsername: 'siam_creative',
+    postUrl: 'https://facebook.com/siam.reels/posts/1122334455',
+    caption: 'রিচ বাড়ানোর ৫টি প্রুভেন নিয়ম। যারা কনটেন্ট ক্রিয়েটর তাদের জন্য মাস্ট ওয়াচ!',
+    postType: 'video',
+    instruction: 'ভিডিও শেয়ার ও মন্তব্য করুন',
+    category: 'member',
+    scheduledForDate: '2026-08-29',
+    scheduledForTime: '12:15',
+    scheduledForTimestamp: new Date('2026-08-29T12:15:00+06:00').getTime(),
+    status: 'scheduled',
+    createdAt: '2026-08-28 07:20 AM',
+    createdAtTimestamp: new Date('2026-08-28T07:20:00+06:00').getTime(),
+    communityId: 'comm_default'
   }
 ];

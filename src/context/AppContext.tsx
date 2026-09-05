@@ -20,7 +20,9 @@ import {
   ReportStatus,
   Badge,
   PostContentType,
-  LinkCategoryType
+  LinkCategoryType,
+  ScheduledLink,
+  ScheduleStatus
 } from '../types';
 import {
   INITIAL_MEMBERS,
@@ -36,7 +38,8 @@ import {
   INITIAL_REVENUE,
   INITIAL_SETTINGS,
   INITIAL_COMMUNITIES,
-  INITIAL_BADGES
+  INITIAL_BADGES,
+  INITIAL_SCHEDULED_LINKS
 } from '../data/seedData';
 import { cleanAndFormatFacebookUrl } from '../utils/facebookLinks';
 import { checkBangladeshSubmissionWindow, getBangladeshCurrentTime12h } from '../utils/bangladeshTime';
@@ -66,6 +69,31 @@ interface AppContextType {
   badges: Badge[];
   darkMode: boolean;
   selectedDate: string; // YYYY-MM-DD (defaults to today)
+
+  // Scheduled Links
+  scheduledLinks: ScheduledLink[];
+  scheduleLink: (data: {
+    postUrl: string;
+    scheduledForDate: string;
+    scheduledForTime: string;
+    postType?: PostContentType;
+    caption?: string;
+    instruction?: string;
+    category?: LinkCategoryType;
+    targetMemberId?: string;
+  }) => { success: boolean; message: string; scheduledLink?: ScheduledLink };
+  editScheduledLink: (id: string, updates: {
+    postUrl?: string;
+    scheduledForDate?: string;
+    scheduledForTime?: string;
+    postType?: PostContentType;
+    caption?: string;
+    instruction?: string;
+  }) => { success: boolean; message: string };
+  cancelScheduledLink: (id: string, reason?: string) => { success: boolean; message: string };
+  forceSubmitScheduledLink: (id: string) => { success: boolean; message: string; link?: DailyLink };
+  deleteScheduledLink: (id: string) => { success: boolean; message: string };
+  processScheduledLinks: () => void;
 
   // Auth & Session
   loginAs: (memberId: string) => void;
@@ -197,7 +225,8 @@ const STORAGE_KEYS = {
   COMMUNITIES: 'slb_communities_v4',
   CURRENT_USER_ID: 'slb_current_user_id_v4',
   COMMUNITY_ID: 'slb_current_comm_id_v4',
-  DARK_MODE: 'slb_dark_mode_v4'
+  DARK_MODE: 'slb_dark_mode_v4',
+  SCHEDULED_LINKS: 'slb_scheduled_links_v4'
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -216,6 +245,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       ...link,
       partNumber: link.partNumber || Math.max(1, Math.ceil((link.linkNumber || 1) / 20))
     }));
+  });
+
+  const [scheduledLinks, setScheduledLinks] = useState<ScheduledLink[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SCHEDULED_LINKS);
+    return saved ? JSON.parse(saved) : INITIAL_SCHEDULED_LINKS;
   });
 
   const [supportRecords, setSupportRecords] = useState<SupportRecord[]>(() => {
@@ -307,6 +341,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Sync back to localStorage
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.MEMBERS, JSON.stringify(members)); }, [members]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.LINKS, JSON.stringify(dailyLinks)); }, [dailyLinks]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.SCHEDULED_LINKS, JSON.stringify(scheduledLinks)); }, [scheduledLinks]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SUPPORTS, JSON.stringify(supportRecords)); }, [supportRecords]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.WEEKS, JSON.stringify(weeklySessions)); }, [weeklySessions]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SPONSORS, JSON.stringify(sponsors)); }, [sponsors]);
@@ -448,6 +483,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setDarkMode(prev => !prev);
   };
 
+  // Atomic Daily Link Sequence Counter (Race-condition free & Monotonic per day & community)
+  // Ensures concurrent submissions never collide or get duplicated link numbers
+  const getNextAtomicLinkNumber = (date: string, communityId: string): number => {
+    const counterKey = `daily_link_counter_${date}_${communityId}`;
+    let currentVal = 0;
+    try {
+      const saved = localStorage.getItem(counterKey);
+      if (saved) currentVal = parseInt(saved, 10) || 0;
+    } catch {}
+
+    let diskLinks: DailyLink[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.LINKS);
+      if (raw) diskLinks = JSON.parse(raw);
+    } catch {}
+
+    const maxMemory = dailyLinks
+      .filter(l => l.date === date && l.communityId === communityId)
+      .reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
+
+    const maxDisk = diskLinks
+      .filter(l => l.date === date && l.communityId === communityId)
+      .reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
+
+    const nextNumber = Math.max(currentVal, maxMemory, maxDisk) + 1;
+    try {
+      localStorage.setItem(counterKey, nextNumber.toString());
+    } catch {}
+    return nextNumber;
+  };
+
   // Submit Daily Facebook Link (1 link per day rule, BD Time Window, Admin Proxy & Special Links)
   const submitDailyLink = (
     postUrl: string, 
@@ -548,37 +614,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (!trimmedUrl.includes('facebook.com') && !trimmedUrl.includes('fb.watch') && !trimmedUrl.includes('fb.me')) {
       return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্ট, ভিডিও বা রিলস এর লিংক দিন।' };
     }
-
-    // Atomic Daily Link Sequence Counter (Race-condition free & Monotonic per day & community)
-    // Ensures concurrent submissions never collide or get duplicated link numbers
-    const getNextAtomicLinkNumber = (date: string, communityId: string): number => {
-      const counterKey = `daily_link_counter_${date}_${communityId}`;
-      let currentVal = 0;
-      try {
-        const saved = localStorage.getItem(counterKey);
-        if (saved) currentVal = parseInt(saved, 10) || 0;
-      } catch {}
-
-      let diskLinks: DailyLink[] = [];
-      try {
-        const raw = localStorage.getItem(STORAGE_KEYS.LINKS);
-        if (raw) diskLinks = JSON.parse(raw);
-      } catch {}
-
-      const maxMemory = dailyLinks
-        .filter(l => l.date === date && l.communityId === communityId)
-        .reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
-
-      const maxDisk = diskLinks
-        .filter(l => l.date === date && l.communityId === communityId)
-        .reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
-
-      const nextNumber = Math.max(currentVal, maxMemory, maxDisk) + 1;
-      try {
-        localStorage.setItem(counterKey, nextNumber.toString());
-      } catch {}
-      return nextNumber;
-    };
 
     const nextLinkNumber = getNextAtomicLinkNumber(TODAY, currentCommunityId);
     const partNumber = Math.max(1, Math.ceil(nextLinkNumber / 20));
@@ -850,6 +885,488 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return r;
     }));
   };
+
+  // ==========================================
+  // SCHEDULED LINKS IMPLEMENTATION
+  // ==========================================
+
+  // Schedule a link in advance
+  const scheduleLink = (data: {
+    postUrl: string;
+    scheduledForDate: string;
+    scheduledForTime: string;
+    postType?: PostContentType;
+    caption?: string;
+    instruction?: string;
+    category?: LinkCategoryType;
+    targetMemberId?: string;
+  }) => {
+    if (!currentUser) {
+      return { success: false, message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' };
+    }
+
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'moderator';
+    const isProxy = Boolean(data.targetMemberId && isAdmin);
+    const targetMember = isProxy 
+      ? members.find(m => m.id === data.targetMemberId) 
+      : currentUser;
+
+    if (!targetMember) {
+      return { success: false, message: 'সদস্য খুঁজে পাওয়া যায়নি।' };
+    }
+
+    // Check member status
+    if (targetMember.status === 'frozen' || targetMember.status === 'suspended' || targetMember.status === 'removed') {
+      return { 
+        success: false, 
+        message: `সদস্য ${targetMember.name} এর অ্যাকাউন্ট বর্তমানে ${targetMember.status} অবস্থায় রয়েছে। শিডিউল করা সম্ভব নয়।` 
+      };
+    }
+
+    // Check if scheduling is globally enabled
+    if (settings.scheduleEnabled === false) {
+      return { success: false, message: 'অ্যাডমিন বর্তমানে শিডিউল লিংক সাবমিশন ফিচারটি সাময়িকভাবে বন্ধ রেখেছেন।' };
+    }
+
+    // URL validation
+    const trimmedUrl = data.postUrl.trim();
+    if (!trimmedUrl.includes('facebook.com') && !trimmedUrl.includes('fb.watch') && !trimmedUrl.includes('fb.me')) {
+      return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্ট, ভিডিও বা রিলস এর লিংক দিন।' };
+    }
+
+    // Schedule Time Validation Rules:
+    // 10:00 AM - 11:59 AM strictly blocked (peak instant submission hour)
+    // Allowed from scheduleAllowedStartTime (default 12:00) to scheduleAllowedEndTime (default 16:50)
+    const allowedStart = settings.scheduleAllowedStartTime || '12:00';
+    const allowedEnd = settings.scheduleAllowedEndTime || settings.submissionWindowEnd || '16:50';
+    
+    const timeParts = data.scheduledForTime.split(':');
+    if (timeParts.length !== 2) {
+      return { success: false, message: 'অনুগ্রহ করে সঠিক সময় নির্বাচন করুন (HH:mm)।' };
+    }
+    const timeNum = parseInt(timeParts[0], 10) * 60 + parseInt(timeParts[1], 10);
+    const [startH, startM] = allowedStart.split(':').map(n => parseInt(n, 10));
+    const allowedStartNum = startH * 60 + startM;
+    const [endH, endM] = allowedEnd.split(':').map(n => parseInt(n, 10));
+    const allowedEndNum = endH * 60 + endM;
+
+    // Specifically block 10:00 AM - 11:59 AM
+    const tenAM = 10 * 60;
+    const twelvePM = 12 * 60;
+    if (timeNum >= tenAM && timeNum < twelvePM) {
+      return {
+        success: false,
+        message: 'সকাল ১০:০০ - ১১:৫৯ সরাসরি লিংক সাবমিশনের পিক আওয়ার হওয়ায় এই সময়ে শিডিউল বুকিং বন্ধ থাকে। অনুগ্রহ করে দুপুর ১২:০০ বা তার পরবর্তী সময় নির্বাচন করুন।'
+      };
+    }
+
+    if (timeNum < allowedStartNum) {
+      return {
+        success: false,
+        message: `শিডিউল লিংক শুধুমাত্র দুপুর ${allowedStart} থেকে বিকেল ${allowedEnd} এর মধ্যে বুক করা যাবে।`
+      };
+    }
+
+    if (timeNum > allowedEndNum) {
+      return {
+        success: false,
+        message: `বিকেল ${allowedEnd} এর পর সাবমিশন উইন্ডো বন্ধ থাকে। অনুগ্রহ করে ${allowedStart} থেকে ${allowedEnd} এর মধ্যে সময় নির্বাচন করুন।`
+      };
+    }
+
+    const scheduledDateTimeStr = `${data.scheduledForDate}T${data.scheduledForTime}:00+06:00`;
+    const scheduledTimestamp = new Date(scheduledDateTimeStr).getTime();
+
+    if (isNaN(scheduledTimestamp)) {
+      return { success: false, message: 'তারিখ ও সময় ফরম্যাট সঠিক নয়।' };
+    }
+
+    // If scheduled for today, must be in the future
+    const now = Date.now();
+    if (data.scheduledForDate === TODAY && scheduledTimestamp <= now + 30000) {
+      return { 
+        success: false, 
+        message: 'শিডিউল সময় অবশ্যই বর্তমান সময় থেকে ভবিষ্যতে হতে হবে।' 
+      };
+    }
+
+    // Check if member already has a pending scheduled link for this date
+    const existingSchedule = scheduledLinks.find(s => 
+      s.memberId === targetMember.id && 
+      s.scheduledForDate === data.scheduledForDate && 
+      (s.status === 'scheduled' || s.status === 'processing')
+    );
+    if (existingSchedule) {
+      return {
+        success: false,
+        message: `${targetMember.name} এর ${data.scheduledForDate} তারিখের জন্য ইতোমধ্যে একটি শিডিউল অপেক্ষমান রয়েছে (সময়: ${existingSchedule.scheduledForTime})।`
+      };
+    }
+
+    const formattedUrl = cleanAndFormatFacebookUrl(trimmedUrl, 'm');
+    const newScheduledLink: ScheduledLink = {
+      id: `sched_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      memberId: targetMember.id,
+      memberName: targetMember.name,
+      memberAvatar: targetMember.avatar,
+      memberUsername: targetMember.username,
+      postUrl: formattedUrl,
+      caption: data.caption?.trim() || '',
+      postType: data.postType || 'photo',
+      instruction: data.instruction?.trim() || '',
+      category: data.category || 'member',
+      scheduledForDate: data.scheduledForDate,
+      scheduledForTime: data.scheduledForTime,
+      scheduledForTimestamp: scheduledTimestamp,
+      status: 'scheduled',
+      createdAt: getBangladeshCurrentTime12h(),
+      createdAtTimestamp: now,
+      isScheduledByAdmin: isProxy,
+      scheduledByAdminId: isProxy ? currentUser.id : undefined,
+      scheduledByAdminName: isProxy ? currentUser.name : undefined,
+      communityId: currentCommunityId
+    };
+
+    setScheduledLinks(prev => [newScheduledLink, ...prev]);
+
+    addAuditLog(
+      isProxy ? 'ADMIN_SCHEDULE_LINK' : 'MEMBER_SCHEDULE_LINK',
+      'link',
+      newScheduledLink.id,
+      targetMember.name,
+      `${currentUser.name} scheduled link for ${data.scheduledForDate} at ${data.scheduledForTime}.`
+    );
+
+    const newNotif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      userId: targetMember.id,
+      type: 'support_reminder',
+      title: '📅 লিংক শিডিউল সফল হয়েছে!',
+      message: `আপনার লিংকটি ${data.scheduledForDate} তারিখ দুপুর ${data.scheduledForTime}-এ স্বয়ংক্রিয়ভাবে লাইভ হবে। আপনি অফলাইনে থাকলেও সার্ভার নিজে থেকে সাবমিট করবে।`,
+      timestamp: 'Just now',
+      read: false
+    };
+    setNotifications(prev => [newNotif, ...prev]);
+
+    return {
+      success: true,
+      message: `✓ লিংকটি সফলভাবে শিডিউল করা হয়েছে (${data.scheduledForDate} @ ${data.scheduledForTime})। নির্ধারিত সময়ে অটোমেটিক লাইভ হবে!`,
+      scheduledLink: newScheduledLink
+    };
+  };
+
+  // Edit pending scheduled link (no 2-minute limit before release!)
+  const editScheduledLink = (id: string, updates: {
+    postUrl?: string;
+    scheduledForDate?: string;
+    scheduledForTime?: string;
+    postType?: PostContentType;
+    caption?: string;
+    instruction?: string;
+  }) => {
+    const item = scheduledLinks.find(s => s.id === id);
+    if (!item) return { success: false, message: 'শিডিউল লিংক খুঁজে পাওয়া যায়নি।' };
+
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+    const isOwner = currentUser?.id === item.memberId;
+
+    if (!isAdmin && !isOwner) {
+      return { success: false, message: 'আপনার এই শিডিউল লিংক এডিট করার অনুমতি নেই।' };
+    }
+
+    if (item.status !== 'scheduled') {
+      return { success: false, message: 'শুধুমাত্র অপেক্ষমান (Scheduled) লিংক এডিট করা সম্ভব।' };
+    }
+
+    let newTimestamp = item.scheduledForTimestamp;
+    const targetDate = updates.scheduledForDate || item.scheduledForDate;
+    const targetTime = updates.scheduledForTime || item.scheduledForTime;
+
+    if (updates.scheduledForDate || updates.scheduledForTime) {
+      const allowedStart = settings.scheduleAllowedStartTime || '12:00';
+      const allowedEnd = settings.scheduleAllowedEndTime || settings.submissionWindowEnd || '16:50';
+      const [h, m] = targetTime.split(':').map(n => parseInt(n, 10));
+      const tNum = h * 60 + m;
+      if (tNum >= 600 && tNum < 720) {
+        return { success: false, message: 'সকাল ১০:০০ - ১১:৫৯ এর মধ্যে শিডিউল অনুমোদিত নয়। দুপুর ১২:০০ বা তার পর নির্বাচন করুন।' };
+      }
+      newTimestamp = new Date(`${targetDate}T${targetTime}:00+06:00`).getTime();
+    }
+
+    const formattedUrl = updates.postUrl ? cleanAndFormatFacebookUrl(updates.postUrl, 'm') : item.postUrl;
+
+    setScheduledLinks(prev => prev.map(s => {
+      if (s.id === id) {
+        return {
+          ...s,
+          postUrl: formattedUrl,
+          scheduledForDate: targetDate,
+          scheduledForTime: targetTime,
+          scheduledForTimestamp: newTimestamp,
+          postType: updates.postType || s.postType,
+          caption: updates.caption !== undefined ? updates.caption : s.caption,
+          instruction: updates.instruction !== undefined ? updates.instruction : s.instruction
+        };
+      }
+      return s;
+    }));
+
+    return { success: true, message: '✓ শিডিউল লিংক সফলভাবে আপডেট করা হয়েছে।' };
+  };
+
+  // Cancel scheduled link
+  const cancelScheduledLink = (id: string, reason?: string) => {
+    const item = scheduledLinks.find(s => s.id === id);
+    if (!item) return { success: false, message: 'শিডিউল লিংক পাওয়া যায়নি।' };
+
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+    const isOwner = currentUser?.id === item.memberId;
+
+    if (!isAdmin && !isOwner) {
+      return { success: false, message: 'অনুমতি নেই।' };
+    }
+
+    if (item.status === 'submitted') {
+      return { success: false, message: 'লিংকটি ইতোমধ্যে সাবমিট হয়ে গেছে, এখন শিডিউল বাতিল করা যাবে না।' };
+    }
+
+    setScheduledLinks(prev => prev.map(s => {
+      if (s.id === id) {
+        return {
+          ...s,
+          status: 'cancelled',
+          cancellationReason: reason || (isAdmin ? `অ্যাডমিন ${currentUser?.name} কর্তৃক বাতিল` : 'সদস্য নিজে বাতিল করেছেন')
+        };
+      }
+      return s;
+    }));
+
+    return { success: true, message: '✓ শিডিউলটি বাতিল করা হয়েছে।' };
+  };
+
+  // Force Submit (Admin immediate release)
+  const forceSubmitScheduledLink = (id: string) => {
+    const item = scheduledLinks.find(s => s.id === id);
+    if (!item) return { success: false, message: 'শিডিউল লিংক পাওয়া যায়নি।' };
+
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+    if (!isAdmin) {
+      return { success: false, message: 'শুধুমাত্র অ্যাডমিন ফোর্স সাবমিট করতে পারবেন।' };
+    }
+
+    if (item.status !== 'scheduled') {
+      return { success: false, message: `এই লিংকটি ইতোমধ্যে ${item.status} অবস্থায় আছে।` };
+    }
+
+    const member = members.find(m => m.id === item.memberId);
+    if (!member) {
+      return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+    }
+
+    const nextLinkNumber = getNextAtomicLinkNumber(TODAY, currentCommunityId);
+    const partNumber = Math.max(1, Math.ceil(nextLinkNumber / 20));
+    const nowTimestamp = Date.now();
+    const editableUntilTimestamp = nowTimestamp + (2 * 60 * 1000);
+
+    const newLink: DailyLink = {
+      id: `link_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      memberId: member.id,
+      memberName: member.name,
+      memberAvatar: member.avatar,
+      memberUsername: member.username,
+      linkNumber: nextLinkNumber,
+      partNumber: partNumber,
+      postUrl: item.postUrl,
+      caption: item.caption || '',
+      postType: item.postType || 'photo',
+      instruction: item.instruction || '',
+      category: item.category || 'member',
+      submittedAt: getBangladeshCurrentTime12h(),
+      submittedAtTimestamp: nowTimestamp,
+      editableUntil: editableUntilTimestamp,
+      date: TODAY,
+      supportCount: 0,
+      communityId: currentCommunityId,
+      verified: true
+    };
+
+    setDailyLinks(prev => [...prev, newLink]);
+
+    setScheduledLinks(prev => prev.map(s => {
+      if (s.id === id) {
+        return {
+          ...s,
+          status: 'submitted',
+          submittedAt: getBangladeshCurrentTime12h(),
+          submittedDailyLinkId: newLink.id,
+          assignedLinkNumber: nextLinkNumber
+        };
+      }
+      return s;
+    }));
+
+    // Update member stats
+    setMembers(prev => prev.map(m => {
+      if (m.id === member.id) {
+        return {
+          ...m,
+          totalLinksSubmitted: m.totalLinksSubmitted + 1,
+          lastActiveDate: TODAY,
+          inactiveDays: 0,
+          status: 'active'
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      'ADMIN_FORCE_SUBMIT_SCHEDULE',
+      'link',
+      newLink.id,
+      member.name,
+      `Admin ${currentUser?.name} force-released scheduled link as Link #${nextLinkNumber} (Part ${partNumber}).`
+    );
+
+    return {
+      success: true,
+      message: `✓ লিংক #${nextLinkNumber} (Part ${partNumber}) হিসেবে সফলভাবে তাৎক্ষণিক লাইভ করা হয়েছে!`,
+      link: newLink
+    };
+  };
+
+  // Delete scheduled link (Admin only)
+  const deleteScheduledLink = (id: string) => {
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+    if (!isAdmin) return { success: false, message: 'অনুমতি নেই।' };
+    setScheduledLinks(prev => prev.filter(s => s.id !== id));
+    return { success: true, message: '✓ শিডিউল রেকর্ড ডিলিট করা হয়েছে।' };
+  };
+
+  // Central Scheduler Engine: Evaluates and promotes scheduled links whose time has arrived
+  const processScheduledLinks = () => {
+    const now = Date.now();
+    const pendingToProcess = scheduledLinks.filter(s => 
+      s.status === 'scheduled' && s.scheduledForTimestamp <= now
+    );
+
+    if (pendingToProcess.length === 0) return;
+
+    pendingToProcess.forEach(item => {
+      // 1. Verify Member Status: Must be ACTIVE and NOT removed/frozen/suspended
+      const member = members.find(m => m.id === item.memberId);
+      if (!member || member.status === 'frozen' || member.status === 'suspended' || member.status === 'removed') {
+        setScheduledLinks(prev => prev.map(s => s.id === item.id ? {
+          ...s,
+          status: 'cancelled',
+          cancellationReason: `সদস্যের অ্যাকাউন্ট নিষ্ক্রিয় বা অ্যাডমিন দ্বারা স্থগিত/রিমুভ করা হয়েছে (${member?.status || 'removed'})`
+        } : s));
+
+        addAuditLog(
+          'SCHEDULE_AUTO_CANCELLED',
+          'link',
+          item.id,
+          item.memberName,
+          `Scheduled link for ${item.memberName} was auto-cancelled because member is ${member?.status || 'not found'}.`
+        );
+        return;
+      }
+
+      // 2. Check if member has already submitted for target date
+      const alreadyHasLink = dailyLinks.some(l => 
+        l.memberId === member.id && 
+        l.date === item.scheduledForDate && 
+        l.communityId === item.communityId
+      );
+
+      if (alreadyHasLink) {
+        setScheduledLinks(prev => prev.map(s => s.id === item.id ? {
+          ...s,
+          status: 'cancelled',
+          cancellationReason: 'আজকের দিনে সদস্যের ইতোমধ্যে একটি লিংক সাবমিট করা আছে'
+        } : s));
+        return;
+      }
+
+      // 3. Atomically generate link number at the exact moment of execution
+      const nextLinkNumber = getNextAtomicLinkNumber(item.scheduledForDate, item.communityId);
+      const partNumber = Math.max(1, Math.ceil(nextLinkNumber / 20));
+      const nowTimestamp = Date.now();
+      const editableUntilTimestamp = nowTimestamp + (2 * 60 * 1000); // 2 minutes from release
+
+      const newDailyLink: DailyLink = {
+        id: `link_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+        memberId: member.id,
+        memberName: member.name,
+        memberAvatar: member.avatar,
+        memberUsername: member.username,
+        linkNumber: nextLinkNumber,
+        partNumber: partNumber,
+        postUrl: item.postUrl,
+        caption: item.caption || '',
+        postType: item.postType || 'photo',
+        instruction: item.instruction || '',
+        category: item.category || 'member',
+        submittedAt: getBangladeshCurrentTime12h(),
+        submittedAtTimestamp: nowTimestamp,
+        editableUntil: editableUntilTimestamp,
+        date: item.scheduledForDate,
+        supportCount: 0,
+        communityId: item.communityId,
+        verified: true
+      };
+
+      setDailyLinks(prev => [...prev, newDailyLink]);
+
+      setScheduledLinks(prev => prev.map(s => s.id === item.id ? {
+        ...s,
+        status: 'submitted',
+        submittedAt: getBangladeshCurrentTime12h(),
+        submittedDailyLinkId: newDailyLink.id,
+        assignedLinkNumber: nextLinkNumber
+      } : s));
+
+      // Update member activity
+      setMembers(prev => prev.map(m => {
+        if (m.id === member.id) {
+          return {
+            ...m,
+            totalLinksSubmitted: m.totalLinksSubmitted + 1,
+            lastActiveDate: item.scheduledForDate,
+            inactiveDays: 0,
+            status: 'active'
+          };
+        }
+        return m;
+      }));
+
+      const newNotif: AppNotification = {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        userId: member.id,
+        type: 'support_reminder',
+        title: `🎉 শিডিউল লিংক #${nextLinkNumber} লাইভ হয়েছে!`,
+        message: `আপনার আগে থেকে শিডিউল করা ফেসবুক লিংকটি নির্দিষ্ট সময়ে স্বয়ংক্রিয়ভাবে লাইভ হয়েছে (Link #${nextLinkNumber}, Part ${partNumber})।`,
+        timestamp: 'Just now',
+        read: false
+      };
+      setNotifications(prev => [newNotif, ...prev]);
+
+      addAuditLog(
+        'SCHEDULED_LINK_AUTO_RELEASED',
+        'link',
+        newDailyLink.id,
+        member.name,
+        `System scheduler automatically released Link #${nextLinkNumber} (Part ${partNumber}) for ${member.name} as scheduled.`
+      );
+    });
+  };
+
+  // Automatic Scheduler ticker: checks for due scheduled links every 10 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      processScheduledLinks();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [scheduledLinks, members, dailyLinks, currentCommunityId]);
 
   // Submit Report
   const submitReport = (
@@ -1696,6 +2213,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         badges: INITIAL_BADGES,
         darkMode,
         selectedDate,
+
+        // Scheduled Links
+        scheduledLinks,
+        scheduleLink,
+        editScheduledLink,
+        cancelScheduledLink,
+        forceSubmitScheduledLink,
+        deleteScheduledLink,
+        processScheduledLinks,
 
         loginAs,
         logout,
