@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { 
   Flame, 
@@ -16,18 +16,42 @@ import {
   Crown,
   Bell,
   UserCheck,
-  Tag
+  Tag,
+  Edit3,
+  Layers
 } from 'lucide-react';
 import { exportToCSV } from '../../utils/helpers';
 import { LinkSubmissionModal } from '../member/LinkSubmissionModal';
-import { LinkCategoryType } from '../../types';
+import { LinkEditModal } from '../member/LinkEditModal';
+import { LinkCategoryType, DailyLink } from '../../types';
 
 export const TodayLinksAdmin: React.FC = () => {
   const { dailyLinks, supportRecords, members, removeDailyLink } = useApp();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'member' | 'admin' | 'vip' | 'notice' | 'proxy'>('all');
+  const [partFilter, setPartFilter] = useState<'all' | number>('all');
   const [selectedLinkAudit, setSelectedLinkAudit] = useState<string | null>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [editingLink, setEditingLink] = useState<DailyLink | null>(null);
+
+  // Dynamic available parts (20 links per part)
+  const availableParts = useMemo(() => {
+    const maxLinkNum = dailyLinks.reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
+    const count = Math.max(1, Math.ceil(Math.max(dailyLinks.length, maxLinkNum) / 20));
+    const list: { partNumber: number; label: string; count: number }[] = [];
+    for (let i = 1; i <= count; i++) {
+      const start = (i - 1) * 20 + 1;
+      const end = i * 20;
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const partCount = dailyLinks.filter(l => (l.partNumber === i) || (Math.ceil((l.linkNumber || 1) / 20) === i)).length;
+      list.push({
+        partNumber: i,
+        label: `Part ${i} (${pad(start)}–${pad(end)})`,
+        count: partCount
+      });
+    }
+    return list;
+  }, [dailyLinks]);
 
   const filteredLinks = dailyLinks.filter(l => {
     // Search match
@@ -39,6 +63,12 @@ export const TodayLinksAdmin: React.FC = () => {
       l.linkNumber.toString().includes(search);
 
     if (!matchesSearch) return false;
+
+    // Part filter
+    if (partFilter !== 'all') {
+      const p = l.partNumber || Math.max(1, Math.ceil((l.linkNumber || 1) / 20));
+      if (p !== partFilter) return false;
+    }
 
     // Category filter
     if (categoryFilter === 'all') return true;
@@ -132,6 +162,37 @@ export const TodayLinksAdmin: React.FC = () => {
             </div>
           </div>
 
+          {/* Part Filter Pills (20 links per part) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+            <div className="flex items-center gap-1 text-gray-400 shrink-0 font-semibold mr-1">
+              <Layers className="w-3.5 h-3.5 text-cyan-400" />
+              <span>পার্ট:</span>
+            </div>
+            <button
+              onClick={() => setPartFilter('all')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border ${
+                partFilter === 'all'
+                  ? 'bg-cyan-600 text-white border-cyan-500'
+                  : 'bg-[#0E0E10] text-gray-400 border-[#1E1E20] hover:text-white'
+              }`}
+            >
+              সব পার্ট ({dailyLinks.length})
+            </button>
+            {availableParts.map(p => (
+              <button
+                key={p.partNumber}
+                onClick={() => setPartFilter(p.partNumber)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors border ${
+                  partFilter === p.partNumber
+                    ? 'bg-cyan-600 text-white border-cyan-500'
+                    : 'bg-[#0E0E10] text-gray-400 border-[#1E1E20] hover:text-white'
+                }`}
+              >
+                {p.label} ({p.count})
+              </button>
+            ))}
+          </div>
+
           {/* Category Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
             {[
@@ -181,7 +242,10 @@ export const TodayLinksAdmin: React.FC = () => {
                       }`}
                     >
                       <td className="py-3 px-3 font-mono font-bold text-indigo-400">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20 font-mono font-bold">
+                            Part {link.partNumber || Math.ceil(link.linkNumber / 20)}
+                          </span>
                           <span>#{link.linkNumber}</span>
                           {link.category === 'vip' && <Crown className="w-3 h-3 text-amber-400" />}
                           {link.category === 'admin' && <ShieldCheck className="w-3 h-3 text-indigo-400" />}
@@ -253,6 +317,13 @@ export const TodayLinksAdmin: React.FC = () => {
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>
+                          <button
+                            onClick={() => setEditingLink(link)}
+                            title="Edit link (Admin Override)"
+                            className="p-1.5 text-gray-500 hover:text-indigo-400 hover:bg-[#1E1E20] rounded-lg transition-colors"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => {
                               if (confirm(`Remove link #${link.linkNumber} by ${link.memberName}?`)) {
@@ -379,6 +450,13 @@ export const TodayLinksAdmin: React.FC = () => {
           onClose={() => setShowSubmitModal(false)}
         />
       )}
+
+      {/* Admin Link Edit Modal (Unlimited Admin Override) */}
+      <LinkEditModal
+        link={editingLink}
+        isOpen={Boolean(editingLink)}
+        onClose={() => setEditingLink(null)}
+      />
 
     </div>
   );

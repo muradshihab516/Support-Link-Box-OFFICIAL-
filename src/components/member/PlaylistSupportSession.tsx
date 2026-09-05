@@ -734,11 +734,15 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
         ) : (
           <div className="space-y-3">
             
-            {/* Top Sub-Row: Serial, Category, Time, and Status */}
+            {/* Top Sub-Row: Serial, Part, Category, Time, and Status */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-black tracking-wider px-2 py-0.5 rounded-md bg-indigo-600 text-white shadow-xs">
                   লিংক #{activeLink.linkNumber.toString().padStart(2, '0')}
+                </span>
+
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-600/20 text-cyan-300 border border-cyan-500/30">
+                  Part {activeLink.partNumber || Math.max(1, Math.ceil(activeLink.linkNumber / 20))}
                 </span>
                 
                 {/* Post Type Badge */}
@@ -1306,14 +1310,19 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  {/* Serial Number Badge */}
-                  <span className={`text-[11px] font-black px-2 py-0.5 rounded-md shrink-0 ${
-                    isSelected 
-                      ? 'bg-indigo-600 text-white' 
-                      : 'bg-[#181820] text-gray-400'
-                  }`}>
-                    #{link.linkNumber.toString().padStart(2, '0')}
-                  </span>
+                  {/* Serial Number Badge & Part */}
+                  <div className="flex flex-col gap-0.5 shrink-0 items-start">
+                    <span className={`text-[11px] font-black px-2 py-0.5 rounded-md ${
+                      isSelected 
+                        ? 'bg-indigo-600 text-white' 
+                        : 'bg-[#181820] text-gray-400'
+                    }`}>
+                      #{link.linkNumber.toString().padStart(2, '0')}
+                    </span>
+                    <span className="text-[8px] font-bold text-cyan-400 bg-cyan-950/40 px-1 py-0.2 rounded border border-cyan-800/40">
+                      P{link.partNumber || Math.max(1, Math.ceil(link.linkNumber / 20))}
+                    </span>
+                  </div>
 
                   {/* Member Avatar */}
                   <div className="w-7 h-7 rounded-lg bg-[#20202C] text-gray-300 font-bold text-xs flex items-center justify-center shrink-0">

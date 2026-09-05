@@ -75,7 +75,8 @@ export interface DailyLink {
   memberName: string;
   memberAvatar: string;
   memberUsername: string;
-  linkNumber: number; // e.g. #57
+  linkNumber: number; // e.g. #57 (unique, immutable)
+  partNumber?: number; // e.g. 1 for 1-20, 2 for 21-40
   postUrl: string;
   caption?: string;
   postType?: PostContentType; // 'photo' | 'video'
@@ -86,12 +87,34 @@ export interface DailyLink {
   submittedByAdminName?: string;
   isSubmittedByAdmin?: boolean;
   submittedAt: string; // ISO or human readable
+  submittedAtTimestamp?: number; // epoch ms
+  editableUntil?: number; // epoch ms (submittedAtTimestamp + 2 * 60 * 1000)
+  lastEditedAt?: string;
+  lastEditedBy?: string;
   date: string; // YYYY-MM-DD
   supportCount: number;
   communityId: string;
   verified: boolean;
   badgeTitle?: string;
 }
+
+// 20 links per Part utilities
+export const getPartNumber = (linkNumber: number): number => {
+  return Math.max(1, Math.ceil(linkNumber / 20));
+};
+
+export const getPartRange = (partNumber: number): { start: number; end: number; label: string; shortLabel: string } => {
+  const safePart = Math.max(1, partNumber);
+  const start = (safePart - 1) * 20 + 1;
+  const end = safePart * 20;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return {
+    start,
+    end,
+    label: `Part ${safePart} (${pad(start)}–${pad(end)})`,
+    shortLabel: `Part ${safePart}`
+  };
+};
 
 export interface SupportRecord {
   id: string;

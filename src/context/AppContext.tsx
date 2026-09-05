@@ -85,6 +85,16 @@ interface AppContextType {
       targetMemberId?: string;
     }
   ) => { success: boolean; message: string; linkNumber?: number; link?: DailyLink };
+  editDailyLink: (
+    linkId: string,
+    data: {
+      postUrl?: string;
+      postType?: PostContentType;
+      caption?: string;
+      instruction?: string;
+      category?: LinkCategoryType;
+    }
+  ) => { success: boolean; message: string };
   updateDailyLinkUrl: (linkId: string, newUrl: string) => { success: boolean; message: string };
   markLinkSupported: (dailyLinkId: string) => { success: boolean; message: string };
   unmarkLinkSupported: (dailyLinkId: string) => { success: boolean; message: string };
@@ -128,7 +138,7 @@ interface AppContextType {
   deleteReport: (reportId: string) => void;
 
   // Links
-  removeDailyLink: (linkId: string) => void;
+  removeDailyLink: (linkId: string) => { success: boolean; message: string };
 
   // Sponsors & Monetization
   createSponsor: (sponsorData: Omit<SponsorAd, 'id' | 'impressions' | 'clicks'>) => void;
@@ -201,7 +211,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [dailyLinks, setDailyLinks] = useState<DailyLink[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.LINKS);
-    return saved ? JSON.parse(saved) : INITIAL_DAILY_LINKS;
+    const list: DailyLink[] = saved ? JSON.parse(saved) : INITIAL_DAILY_LINKS;
+    return list.map(link => ({
+      ...link,
+      partNumber: link.partNumber || Math.max(1, Math.ceil((link.linkNumber || 1) / 20))
+    }));
   });
 
   const [supportRecords, setSupportRecords] = useState<SupportRecord[]>(() => {
@@ -304,6 +318,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REVENUE, JSON.stringify(revenueRecords)); }, [revenueRecords]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMMUNITIES, JSON.stringify(communities)); }, [communities]);
+
+  // Real-time cross-tab synchronization for daily links
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.LINKS && e.newValue) {
+        try {
+          const freshLinks: DailyLink[] = JSON.parse(e.newValue);
+          setDailyLinks(freshLinks.map(link => ({
+            ...link,
+            partNumber: link.partNumber || Math.max(1, Math.ceil((link.linkNumber || 1) / 20))
+          })));
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
   useEffect(() => { 
     if (currentUserId) localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, currentUserId);
     else localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
@@ -518,17 +549,51 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্ট, ভিডিও বা রিলস এর লিংক দিন।' };
     }
 
-    const todayCommunityLinks = dailyLinks.filter(l => l.date === TODAY && l.communityId === currentCommunityId);
-    const nextLinkNumber = todayCommunityLinks.length + 1;
+    // Atomic Daily Link Sequence Counter (Race-condition free & Monotonic per day & community)
+    // Ensures concurrent submissions never collide or get duplicated link numbers
+    const getNextAtomicLinkNumber = (date: string, communityId: string): number => {
+      const counterKey = `daily_link_counter_${date}_${communityId}`;
+      let currentVal = 0;
+      try {
+        const saved = localStorage.getItem(counterKey);
+        if (saved) currentVal = parseInt(saved, 10) || 0;
+      } catch {}
+
+      let diskLinks: DailyLink[] = [];
+      try {
+        const raw = localStorage.getItem(STORAGE_KEYS.LINKS);
+        if (raw) diskLinks = JSON.parse(raw);
+      } catch {}
+
+      const maxMemory = dailyLinks
+        .filter(l => l.date === date && l.communityId === communityId)
+        .reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
+
+      const maxDisk = diskLinks
+        .filter(l => l.date === date && l.communityId === communityId)
+        .reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
+
+      const nextNumber = Math.max(currentVal, maxMemory, maxDisk) + 1;
+      try {
+        localStorage.setItem(counterKey, nextNumber.toString());
+      } catch {}
+      return nextNumber;
+    };
+
+    const nextLinkNumber = getNextAtomicLinkNumber(TODAY, currentCommunityId);
+    const partNumber = Math.max(1, Math.ceil(nextLinkNumber / 20));
+    const nowTimestamp = Date.now();
+    const editableUntilTimestamp = nowTimestamp + (2 * 60 * 1000); // 2 minutes in ms (120,000ms)
     const formattedUrl = cleanAndFormatFacebookUrl(trimmedUrl, 'm');
 
     const newLink: DailyLink = {
-      id: `link_${Date.now()}`,
+      id: `link_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       memberId: effectiveMember.id,
       memberName: effectiveMember.name,
       memberAvatar: effectiveMember.avatar,
       memberUsername: effectiveMember.username,
-      linkNumber: nextLinkNumber,
+      linkNumber: nextLinkNumber, // Permanent, unique, strictly immutable sequence number
+      partNumber: partNumber, // e.g. Part 1 (01-20), Part 2 (21-40)
       postUrl: formattedUrl,
       caption: caption?.trim() || '',
       postType: options?.postType || 'photo',
@@ -539,6 +604,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       submittedByAdminName: isProxySubmission ? currentUser.name : undefined,
       isSubmittedByAdmin: isProxySubmission,
       submittedAt: getBangladeshCurrentTime12h(),
+      submittedAtTimestamp: nowTimestamp,
+      editableUntil: editableUntilTimestamp,
       date: TODAY,
       supportCount: 0,
       communityId: currentCommunityId,
@@ -572,7 +639,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     // Calculate remaining links for feedback
-    const remainingToSupport = todayCommunityLinks.length;
+    const remainingToSupport = dailyLinks.filter(l => l.memberId !== effectiveMember.id).length;
 
     // Trigger Notification for the member
     const newNotif: AppNotification = {
@@ -684,24 +751,95 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true, message: 'Support un-marked.' };
   };
 
-  const updateDailyLinkUrl = (linkId: string, newUrl: string) => {
-    if (!newUrl || !newUrl.trim()) return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্টের লিংক দিন।' };
-    const trimmed = newUrl.trim();
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      return { success: false, message: 'লিংকটি https:// দিয়ে শুরু হতে হবে।' };
+  // Edit Daily Link (2 minutes window for members, anytime for admins)
+  // Link Number & Part Number remain permanently immutable
+  const editDailyLink = (
+    linkId: string,
+    data: {
+      postUrl?: string;
+      postType?: PostContentType;
+      caption?: string;
+      instruction?: string;
+      category?: LinkCategoryType;
+    }
+  ): { success: boolean; message: string } => {
+    const targetLink = dailyLinks.find(l => l.id === linkId);
+    if (!targetLink) {
+      return { success: false, message: 'লিংক খুঁজে পাওয়া যায়নি।' };
     }
 
-    setDailyLinks(prev => prev.map(l => l.id === linkId ? { ...l, postUrl: trimmed } : l));
-    
-    // Also mark any open reports on this link as updated by author
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+
+    // Check member permissions and 2-minute time window
+    if (!isAdmin) {
+      if (!currentUser || targetLink.memberId !== currentUser.id) {
+        return { success: false, message: 'আপনি অন্যের লিংক পরিবর্তন করতে পারবেন না।' };
+      }
+
+      // Check 2-minute edit window (timestamp enforcement)
+      const now = Date.now();
+      const deadline = targetLink.editableUntil || (targetLink.submittedAtTimestamp ? targetLink.submittedAtTimestamp + 120000 : 0);
+      if (deadline > 0 && now > deadline) {
+        return {
+          success: false,
+          message: '২ মিনিটের এডিট করার সময়সীমা পার হয়ে গেছে! এখন আর লিংক বা বিবরণ পরিবর্তন করা সম্ভব নয়।'
+        };
+      }
+    }
+
+    // Validate postUrl if provided
+    let formattedUrl = targetLink.postUrl;
+    if (data.postUrl !== undefined && data.postUrl.trim() !== '') {
+      const trimmed = data.postUrl.trim();
+      if (!trimmed.includes('facebook.com') && !trimmed.includes('fb.watch') && !trimmed.includes('fb.me')) {
+        return { success: false, message: 'অনুগ্রহ করে সঠিক ফেসবুক পোস্ট, ভিডিও বা রিলসের লিংক দিন।' };
+      }
+      formattedUrl = cleanAndFormatFacebookUrl(trimmed, 'm');
+    }
+
+    const editorName = currentUser ? (isAdmin && targetLink.memberId !== currentUser.id ? `Admin ${currentUser.name}` : currentUser.name) : 'User';
+
+    setDailyLinks(prev => prev.map(l => {
+      if (l.id === linkId) {
+        return {
+          ...l,
+          // CRITICAL: linkNumber and partNumber are STRICTLY IMMUTABLE!
+          postUrl: formattedUrl,
+          postType: data.postType !== undefined ? data.postType : l.postType,
+          caption: data.caption !== undefined ? data.caption.trim() : l.caption,
+          instruction: data.instruction !== undefined ? data.instruction.trim() : l.instruction,
+          category: (isAdmin && data.category) ? data.category : l.category,
+          lastEditedAt: getBangladeshCurrentTime12h(),
+          lastEditedBy: editorName
+        };
+      }
+      return l;
+    }));
+
+    // If author updated link, update any open reports
     setReports(prev => prev.map(r => {
       if (r.targetLinkId === linkId && (r.status === 'open' || r.status === 'pending')) {
-        return { ...r, adminNotes: 'লিংক দাতা নতুন লিংক দিয়ে আপডেট করেছেন' };
+        return { ...r, adminNotes: `${editorName} লিংক/তথ্য সংশোধন করেছেন` };
       }
       return r;
     }));
 
-    return { success: true, message: '✓ আপনার ফেসবুক পোস্টের লিংক সফলভাবে আপডেট করা হয়েছে!' };
+    addAuditLog(
+      'EDIT_LINK',
+      'link',
+      linkId,
+      targetLink.memberName,
+      `${editorName} edited details for Link #${targetLink.linkNumber} (${isAdmin ? 'Admin Override' : 'Within 2-min window'}).`
+    );
+
+    return {
+      success: true,
+      message: `✓ লিংক #${targetLink.linkNumber} এর তথ্য সফলভাবে আপডেট করা হয়েছে!`
+    };
+  };
+
+  const updateDailyLinkUrl = (linkId: string, newUrl: string) => {
+    return editDailyLink(linkId, { postUrl: newUrl });
   };
 
   const resolveReportsForLink = (linkId: string) => {
@@ -1220,10 +1358,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setReports(prev => prev.filter(r => r.id !== reportId));
   };
 
-  // Links
-  const removeDailyLink = (linkId: string) => {
+  // Links Removal (Admin can remove anytime; Member only within 2 minutes)
+  const removeDailyLink = (linkId: string): { success: boolean; message: string } => {
+    const targetLink = dailyLinks.find(l => l.id === linkId);
+    if (!targetLink) {
+      return { success: false, message: 'লিংক পাওয়া যায়নি।' };
+    }
+
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+
+    if (!isAdmin) {
+      if (!currentUser || targetLink.memberId !== currentUser.id) {
+        return { success: false, message: 'আপনি অন্যের লিংক ডিলিট করতে পারবেন না।' };
+      }
+      const now = Date.now();
+      const deadline = targetLink.editableUntil || (targetLink.submittedAtTimestamp ? targetLink.submittedAtTimestamp + 120000 : 0);
+      if (deadline > 0 && now > deadline) {
+        return {
+          success: false,
+          message: '২ মিনিট অতিবাহিত হওয়ায় মেম্বার কর্তৃক লিংক ডিলিট বা রিমুভ করা সম্ভব নয়। প্রয়োজনে এডমিনের সাথে যোগাযোগ করুন।'
+        };
+      }
+    }
+
     setDailyLinks(prev => prev.filter(l => l.id !== linkId));
-    addAuditLog('REMOVE_LINK', 'link', linkId, linkId, `Removed link ID ${linkId}`);
+    addAuditLog(
+      'REMOVE_LINK',
+      'link',
+      linkId,
+      targetLink.memberName,
+      `${isAdmin ? 'Admin ' + (currentUser?.name || '') : 'Member ' + targetLink.memberName} removed Link #${targetLink.linkNumber}`
+    );
+    return { success: true, message: `✓ লিংক #${targetLink.linkNumber} সফলভাবে রিমুভ করা হয়েছে।` };
   };
 
   // Member points and status helper
@@ -1538,6 +1704,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         toggleDarkMode,
 
         submitDailyLink,
+        editDailyLink,
         updateDailyLinkUrl,
         markLinkSupported,
         unmarkLinkSupported,

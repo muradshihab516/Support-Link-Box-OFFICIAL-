@@ -24,9 +24,13 @@ import {
   Video,
   Crown,
   ShieldCheck,
-  Bell
+  Bell,
+  Edit3,
+  Trash2,
+  Lock
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
+import { LinkEditModal } from './LinkEditModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
 import { PlaylistSupportSession } from './PlaylistSupportSession';
 import { ReportModal } from './ReportModal';
@@ -50,14 +54,38 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
     reports,
     getTodaySupportStats, 
     markLinkSupported, 
-    unmarkLinkSupported 
+    unmarkLinkSupported,
+    removeDailyLink
   } = useApp();
 
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
+
   const [filter, setFilter] = useState<'all' | 'batch' | 'vip' | 'admin' | 'pending' | 'supported'>('all');
+  const [selectedPart, setSelectedPart] = useState<'all' | number>('all');
+  const [editingLink, setEditingLink] = useState<DailyLink | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
   const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string; number?: number; memberId?: string; url?: string } | null>(null);
+
+  // Dynamic available parts based on 20 links per part
+  const availableParts = useMemo(() => {
+    const maxLinkNum = dailyLinks.reduce((max, l) => Math.max(max, l.linkNumber || 0), 0);
+    const count = Math.max(1, Math.ceil(Math.max(dailyLinks.length, maxLinkNum) / 20));
+    const list: { partNumber: number; label: string; count: number }[] = [];
+    for (let i = 1; i <= count; i++) {
+      const start = (i - 1) * 20 + 1;
+      const end = i * 20;
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const partCount = dailyLinks.filter(l => (l.partNumber === i) || (Math.ceil((l.linkNumber || 1) / 20) === i)).length;
+      list.push({
+        partNumber: i,
+        label: `Part ${i} (${pad(start)}–${pad(end)})`,
+        count: partCount
+      });
+    }
+    return list;
+  }, [dailyLinks]);
 
   // Optimistic UI state for instant checkmark feedback
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, boolean>>({});
@@ -87,21 +115,21 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
   const supportedSet = useMemo(() => stats ? stats.supportedLinkIds : new Set<string>(), [stats]);
 
-  // Reset pagination when search, filter, or batch changes
+  // Reset pagination when search, filter, or part changes
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [filter, searchQuery, batchRange]);
+  }, [filter, searchQuery, selectedPart]);
 
   // Filter out currentUser's own link or flag it
   const eligibleLinks = useMemo(() => {
     return dailyLinks.filter(link => {
       const isOwn = currentUser ? link.memberId === currentUser.id : false;
       
-      // Batch range filter
-      if (batchRange === '1-50' && (link.linkNumber < 1 || link.linkNumber > 50)) return false;
-      if (batchRange === '51-100' && (link.linkNumber < 51 || link.linkNumber > 100)) return false;
-      if (batchRange === '101-150' && (link.linkNumber < 101 || link.linkNumber > 150)) return false;
-      if (batchRange === '151-200' && (link.linkNumber < 151 || link.linkNumber > 200)) return false;
+      // Part filter (20 links per Part)
+      if (selectedPart !== 'all') {
+        const linkPart = link.partNumber || Math.max(1, Math.ceil((link.linkNumber || 1) / 20));
+        if (linkPart !== selectedPart) return false;
+      }
 
       // Search match
       const matchesSearch = 
@@ -335,32 +363,41 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
         </div>
       )}
 
-      {/* Batch Jump Selector & Performance Notice */}
-      <div className="bg-[#131315] border border-[#1E1E20] rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+      {/* Part System (20 Links per Part) Navigation */}
+      <div className="bg-[#131315] border border-[#1E1E20] rounded-xl p-3 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs shadow-xs">
         <div className="flex items-center gap-2 text-gray-400">
-          <Layers className="w-4 h-4 text-indigo-400 shrink-0" />
-          <span className="font-semibold text-white">গ্রুপ ব্যাচ নেভিগেশন (দ্রুত জাম্প):</span>
-          <span className="text-gray-500 hidden sm:inline">একসাথে সব না লোড করে দ্রুত লোড হচ্ছে</span>
+          <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="font-semibold text-white">পার্ট নির্বাচন (প্রতি ২০টি লিংক = ১ পার্ট):</span>
+          <span className="text-gray-500 hidden sm:inline">১-২০ Part 1, ২১-৪০ Part 2, ৪১-৬০ Part 3</span>
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-          {[
-            { id: 'all', label: 'সব লিংক' },
-            { id: '1-50', label: '#1-50 ব্যাচ' },
-            { id: '51-100', label: '#51-100 ব্যাচ' },
-            { id: '101-150', label: '#101-150 ব্যাচ' },
-            { id: '151-200', label: '#151-200 ব্যাচ' },
-          ].map(b => (
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-thin">
+          <button
+            onClick={() => setSelectedPart('all')}
+            className={`px-3 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap transition-colors ${
+              selectedPart === 'all'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-[#1C1C20] text-gray-400 hover:text-white hover:bg-[#25252A]'
+            }`}
+          >
+            সব পার্ট ({dailyLinks.length})
+          </button>
+          {availableParts.map(p => (
             <button
-              key={b.id}
-              onClick={() => setBatchRange(b.id as any)}
-              className={`px-3 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap transition-colors ${
-                batchRange === b.id
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'bg-[#1C1C20] text-gray-400 hover:text-white hover:bg-[#25252A]'
+              key={p.partNumber}
+              onClick={() => setSelectedPart(p.partNumber)}
+              className={`px-3 py-1.5 rounded-lg font-bold text-xs whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+                selectedPart === p.partNumber
+                  ? 'bg-cyan-600 text-white shadow-xs'
+                  : 'bg-[#1C1C20] text-gray-300 hover:text-white hover:bg-[#25252A]'
               }`}
             >
-              {b.label}
+              <span>{p.label}</span>
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                selectedPart === p.partNumber ? 'bg-black/30 text-white' : 'bg-[#2A2A30] text-gray-400'
+              }`}>
+                {p.count}
+              </span>
             </button>
           ))}
         </div>
@@ -507,9 +544,14 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <div className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20 inline-block font-mono">
-                      #{link.linkNumber}
+                  <div className="text-right shrink-0 flex flex-col items-end gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-cyan-300 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20 font-mono">
+                        Part {link.partNumber || Math.ceil(link.linkNumber / 20)}
+                      </span>
+                      <div className="text-xs font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20 inline-block font-mono">
+                        #{link.linkNumber}
+                      </div>
                     </div>
                     <div className="text-[10px] text-gray-500 mt-0.5">
                       {link.supportCount + (optimisticStatus[link.id] && !supportedSet.has(link.id) ? 1 : 0)} supports
@@ -679,16 +721,65 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                     )}
                   </button>
                 ) : (
-                  <a
-                    href={getFacebookAppUrl(link.postUrl)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="py-2 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors"
-                    title="নিজের লিংকটি ফেসবুক অ্যাপ বা ব্রাউজারে টেস্ট করুন"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>নিজের লিংক চেক</span>
-                  </a>
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href={getFacebookAppUrl(link.postUrl)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-2 px-2.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 hover:text-purple-200 text-xs font-bold rounded-lg flex items-center gap-1 transition-colors"
+                      title="নিজের লিংকটি ফেসবুক অ্যাপ বা ব্রাউজারে টেস্ট করুন"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>চেক</span>
+                    </a>
+
+                    {(() => {
+                      const deadline = link.editableUntil || (link.submittedAtTimestamp ? link.submittedAtTimestamp + 120000 : 0);
+                      const canEdit = deadline > 0 && Date.now() < deadline;
+                      return canEdit ? (
+                        <button
+                          onClick={() => setEditingLink(link)}
+                          className="py-2 px-2.5 bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold rounded-lg flex items-center gap-1 transition-colors animate-pulse"
+                          title="২ মিনিটের এডিট উইন্ডো সক্রিয় আছে"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-indigo-400" />
+                          <span>এডিট (২মি)</span>
+                        </button>
+                      ) : (
+                        <span 
+                          className="py-2 px-2 bg-[#1A1A1D] border border-[#26262B] text-gray-500 text-[11px] font-semibold rounded-lg flex items-center gap-1"
+                          title="২ মিনিট পার হয়ে যাওয়ায় মেম্বার কর্তৃক আর এডিট বা ডিলিট সম্ভব নয়"
+                        >
+                          <Lock className="w-3 h-3 text-gray-500" />
+                          <span>লকড</span>
+                        </span>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* Admin Edit/Remove Controls for any link */}
+                {isAdmin && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setEditingLink(link)}
+                      className="p-2 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 hover:text-white rounded-lg text-xs transition-colors"
+                      title="Admin Edit Link"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`এডমিন হিসেবে #${link.linkNumber} (${link.memberName}) এর লিংকটি ডিলিট করতে চান?`)) {
+                          removeDailyLink(link.id);
+                        }
+                      }}
+                      className="p-2 bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/30 text-rose-300 hover:text-white rounded-lg text-xs transition-colors"
+                      title="Admin Remove Link"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 )}
 
                 <button
@@ -761,6 +852,13 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       <LinkSubmissionModal
         isOpen={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
+      />
+
+      {/* Link Edit Modal (2-Minute Member Window / Unlimited Admin Override) */}
+      <LinkEditModal
+        link={editingLink}
+        isOpen={Boolean(editingLink)}
+        onClose={() => setEditingLink(null)}
       />
 
       {/* Report Modal */}
