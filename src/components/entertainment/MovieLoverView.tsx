@@ -11,11 +11,15 @@ import {
   Filter,
   Flame,
   Clock,
-  Play
+  Play,
+  MessageSquare,
+  Plus
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { MovieItem } from '../../types';
 import { MovieDetailsModal } from './MovieDetailsModal';
+import { MovieRequestModal } from './MovieRequestModal';
+import { MovieRequestsSection } from './MovieRequestsSection';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
 import { 
   NativeMovieGridAd, 
@@ -24,8 +28,10 @@ import {
 } from '../monetization/DemoAdUnits';
 
 export const MovieLoverView: React.FC = () => {
-  const { movies, incrementMovieViews } = useApp();
+  const { movies, movieRequests, incrementMovieViews } = useApp();
 
+  const [activeSection, setActiveSection] = useState<'catalog' | 'requests'>('catalog');
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'downloads' | 'rating' | 'newest'>('downloads');
@@ -94,7 +100,7 @@ export const MovieLoverView: React.FC = () => {
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-950/50 via-[#13131a] to-indigo-950/40 border border-purple-500/20 p-5 sm:p-7 shadow-xl">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-2xl">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
                 <Flame className="w-3.5 h-3.5 text-purple-400" />
                 Entertainment Hub
@@ -102,35 +108,98 @@ export const MovieLoverView: React.FC = () => {
               <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
                 Fast Cloud Mirrors
               </span>
+              <button
+                onClick={() => setIsRequestModalOpen(true)}
+                className="px-2.5 py-0.5 rounded-full bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 text-xs font-bold border border-pink-500/30 flex items-center gap-1 transition-colors"
+              >
+                <Plus className="w-3 h-3 text-pink-400" />
+                <span>মুভি রিকোয়েস্ট বক্স</span>
+              </button>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">
               <Film className="w-7 h-7 text-indigo-400" />
               Movie Lover Cinema & Downloads
             </h1>
             <p className="text-xs sm:text-sm text-gray-300 leading-relaxed">
-              আপনার পছন্দের সকল মুভি দেখুন এবং হাই-স্পিড ক্লাউড স্টোরেজ (Pixeldrain, GDFlex, GDFile) থেকে 480p, 720p, 1080p এবং 4K ফরম্যাটে সরাসরি ডাউনলোড করুন।
+              আপনার পছন্দের সকল মুভি দেখুন এবং হাই-স্পিড ক্লাউড স্টোরেজ (Pixeldrain, GDFlex, GDFile) থেকে 480p, 720p, 1080p এবং 4K ফরম্যাটে সরাসরি ডাউনলোড করুন। কাঙ্ক্ষিত মুভি না পেলে রিকোয়েস্ট করুন!
             </p>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="p-3 rounded-xl bg-black/40 border border-gray-800 text-center">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <div className="p-3 rounded-xl bg-black/40 border border-gray-800 text-center min-w-[70px]">
               <div className="text-lg font-black text-indigo-400">{movies.filter(m => m.status === 'active').length}</div>
               <div className="text-[10px] text-gray-400 uppercase font-bold">Active Movies</div>
             </div>
-            <div className="p-3 rounded-xl bg-black/40 border border-gray-800 text-center">
+            <div className="p-3 rounded-xl bg-black/40 border border-gray-800 text-center min-w-[70px]">
               <div className="text-lg font-black text-emerald-400">
                 {movies.reduce((acc, m) => acc + (m.totalDownloads || 0), 0)}
               </div>
-              <div className="text-[10px] text-gray-400 uppercase font-bold">Total Downloads</div>
+              <div className="text-[10px] text-gray-400 uppercase font-bold">Downloads</div>
+            </div>
+            <div className="p-3 rounded-xl bg-black/40 border border-purple-500/30 text-center min-w-[70px]">
+              <div className="text-lg font-black text-purple-400">{movieRequests.length}</div>
+              <div className="text-[10px] text-purple-300 uppercase font-bold">Requests</div>
             </div>
           </div>
+        </div>
+
+        {/* Section Navigation Tabs: Catalog vs Requests */}
+        <div className="relative z-10 flex flex-wrap items-center gap-2 mt-5 pt-4 border-t border-gray-800/80">
+          <button
+            onClick={() => setActiveSection('catalog')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeSection === 'catalog'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'bg-black/30 hover:bg-white/10 text-gray-400 hover:text-white border border-gray-800'
+            }`}
+          >
+            <Film className="w-3.5 h-3.5" />
+            <span>মুভি সংগ্রহ ও ডাউনলোড (Movies Catalog)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('requests')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeSection === 'requests'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                : 'bg-black/30 hover:bg-white/10 text-gray-400 hover:text-white border border-gray-800'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>মুভি রিকোয়েস্ট বক্স (Movie Requests)</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+              activeSection === 'requests' ? 'bg-white/20 text-white' : 'bg-purple-500/20 text-purple-300'
+            }`}>
+              {movieRequests.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setIsRequestModalOpen(true)}
+            className="ml-auto flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold shadow-md shadow-purple-600/20 transition-all"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>মুভি রিকোয়েস্ট করুন</span>
+          </button>
         </div>
       </div>
 
       {/* Sponsor Banner Slot */}
       <SponsoredBanner position="top_banner" />
 
-      {/* Search & Filter Bar */}
+      {activeSection === 'requests' ? (
+        <MovieRequestsSection
+          onOpenRequestModal={() => setIsRequestModalOpen(true)}
+          onOpenMovieById={(movieId) => {
+            const found = movies.find(m => m.id === movieId);
+            if (found) {
+              handleOpenMovie(found);
+            }
+          }}
+        />
+      ) : (
+        <>
+          {/* Search & Filter Bar */}
       <div className="p-4 rounded-2xl bg-[#121216] border border-gray-800/80 space-y-3 shadow-md">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           
@@ -295,6 +364,8 @@ export const MovieLoverView: React.FC = () => {
           })}
         </div>
       )}
+      </>
+      )}
 
       {/* Bottom Display Ad Banner */}
       <ModalDownloadBannerAd />
@@ -304,6 +375,13 @@ export const MovieLoverView: React.FC = () => {
         isOpen={!!selectedMovie}
         onClose={() => setSelectedMovie(null)}
         movie={selectedMovie}
+      />
+
+      {/* Movie Request Modal */}
+      <MovieRequestModal
+        isOpen={isRequestModalOpen}
+        onClose={() => setIsRequestModalOpen(false)}
+        onSuccess={() => setActiveSection('requests')}
       />
 
     </div>

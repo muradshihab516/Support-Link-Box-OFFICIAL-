@@ -12,7 +12,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#818CF8',
     glowColor: 'rgba(129, 140, 248, 0.4)',
     badgeText: 'Galaxy Space',
-    tagline: 'Deep space cosmic wonder'
+    tagline: 'Deep space cosmic wonder',
+    gradientFallback: 'linear-gradient(135deg, #090B1E 0%, #190C2F 45%, #05050A 100%)'
   },
   {
     id: 'cyberpunk_neon',
@@ -25,7 +26,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#F43F5E',
     glowColor: 'rgba(244, 63, 94, 0.4)',
     badgeText: 'Neon City',
-    tagline: 'Neo Tokyo vibrant night'
+    tagline: 'Neo Tokyo vibrant night',
+    gradientFallback: 'linear-gradient(135deg, #1C071C 0%, #0D1630 50%, #07070F 100%)'
   },
   {
     id: 'aurora_borealis',
@@ -38,7 +40,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#10B981',
     glowColor: 'rgba(16, 185, 129, 0.4)',
     badgeText: 'Aurora Green',
-    tagline: 'Dancing northern lights'
+    tagline: 'Dancing northern lights',
+    gradientFallback: 'linear-gradient(135deg, #031713 0%, #08291F 45%, #060B12 100%)'
   },
   {
     id: 'midnight_cinema',
@@ -51,7 +54,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#A855F7',
     glowColor: 'rgba(168, 85, 247, 0.4)',
     badgeText: 'Film Studio',
-    tagline: 'Cinematic theater vibe'
+    tagline: 'Cinematic theater vibe',
+    gradientFallback: 'linear-gradient(135deg, #220810 0%, #150A18 45%, #08080C 100%)'
   },
   {
     id: 'misty_nature',
@@ -64,7 +68,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#14B8A6',
     glowColor: 'rgba(20, 184, 166, 0.4)',
     badgeText: 'Misty Forest',
-    tagline: 'Tranquil moody pine ridge'
+    tagline: 'Tranquil moody pine ridge',
+    gradientFallback: 'linear-gradient(135deg, #041814 0%, #0D261E 45%, #070C0D 100%)'
   },
   {
     id: 'golden_sunset',
@@ -77,7 +82,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#F59E0B',
     glowColor: 'rgba(245, 158, 11, 0.4)',
     badgeText: 'Golden Sunset',
-    tagline: 'Warm golden hour calmness'
+    tagline: 'Warm golden hour calmness',
+    gradientFallback: 'linear-gradient(135deg, #2B1207 0%, #1F0D1C 45%, #0A080E 100%)'
   },
   {
     id: 'anime_twilight',
@@ -90,7 +96,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#C084FC',
     glowColor: 'rgba(192, 132, 252, 0.4)',
     badgeText: 'Anime Skies',
-    tagline: 'Dreamy anime cloudscapes'
+    tagline: 'Dreamy anime cloudscapes',
+    gradientFallback: 'linear-gradient(135deg, #1A0D30 0%, #2D1448 45%, #0D0918 100%)'
   },
   {
     id: 'royal_obsidian',
@@ -103,7 +110,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#6366F1',
     glowColor: 'rgba(99, 102, 241, 0.4)',
     badgeText: 'Liquid Obsidian',
-    tagline: 'Executive metallic flow'
+    tagline: 'Executive metallic flow',
+    gradientFallback: 'linear-gradient(135deg, #0A0B14 0%, #121529 50%, #07080E 100%)'
   },
   {
     id: 'minimal_slate',
@@ -116,7 +124,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#6366F1',
     glowColor: 'rgba(99, 102, 241, 0.3)',
     badgeText: 'Studio Clean',
-    tagline: 'Zero-distraction slate'
+    tagline: 'Zero-distraction slate',
+    gradientFallback: 'linear-gradient(135deg, #0C0D12 0%, #141620 50%, #08090C 100%)'
   },
   {
     id: 'custom_wallpaper',
@@ -129,7 +138,8 @@ export const THEME_PRESETS: ThemePreset[] = [
     accentColor: '#EC4899',
     glowColor: 'rgba(236, 72, 153, 0.4)',
     badgeText: 'Personal Photo',
-    tagline: 'Custom picture theme'
+    tagline: 'Custom picture theme',
+    gradientFallback: 'linear-gradient(135deg, #160B1F 0%, #0E1020 50%, #09090E 100%)'
   }
 ];
 

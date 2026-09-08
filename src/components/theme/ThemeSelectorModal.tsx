@@ -56,8 +56,8 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({ isOpen, 
     }
     setCustomError('');
     setTheme('custom_wallpaper', customUrlInput.trim());
-    setCopiedNotification('কাস্টম ব্যাকগ্রাউন্ড সফলভাবে সেট হয়েছে!');
-    setTimeout(() => setCopiedNotification(''), 3000);
+    setCopiedNotification('কাস্টম ব্যাকগ্রাউন্ড সফলভাবে সেট ও প্রয়োগ হয়েছে!');
+    setTimeout(() => setCopiedNotification(''), 4000);
   };
 
   const handleSelectTheme = (theme: ThemePreset) => {
@@ -70,6 +70,8 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({ isOpen, 
     } else {
       setTheme(theme.id);
     }
+    setCopiedNotification(`'${theme.banglaName}' থিম সফলভাবে সেট হয়েছে!`);
+    setTimeout(() => setCopiedNotification(''), 4000);
   };
 
   return (
@@ -142,62 +144,110 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({ isOpen, 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           
+          {/* Instant notification alert when theme is picked */}
+          {copiedNotification && (
+            <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400" />
+                <span>{copiedNotification}</span>
+              </div>
+              <button
+                onClick={onClose}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-[11px] font-bold shadow-xs transition-colors"
+              >
+                মূল পেজে দেখুন (Close)
+              </button>
+            </div>
+          )}
+
           {/* Active Theme Preview Strip */}
-          <div className={`p-4 rounded-2xl border relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+          <div className={`p-4 rounded-2xl border relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
             darkMode ? 'bg-[#15151C] border-white/10' : 'bg-slate-100 border-slate-200'
           }`}>
             <div className="flex items-center gap-3.5">
               <div 
-                className="w-14 h-14 rounded-xl overflow-hidden border-2 border-indigo-500 shadow-md bg-cover bg-center shrink-0 relative"
-                style={{ 
-                  backgroundImage: activeTheme.bgImageUrl ? `url(${activeTheme.bgImageUrl})` : 'none',
-                  backgroundColor: '#1E1E24'
-                }}
+                className="w-16 h-16 rounded-xl overflow-hidden border-2 border-indigo-500 shadow-md shrink-0 relative bg-slate-900"
               >
-                {!activeTheme.bgImageUrl && (
+                {activeTheme.bgImageUrl ? (
+                  <img 
+                    src={activeTheme.thumbnailUrl || activeTheme.bgImageUrl}
+                    alt={activeTheme.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
                   <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                    Pure
+                    Slate
                   </div>
                 )}
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> সক্রিয় থিম
+                    <Check className="w-3 h-3" /> লাইভ সক্রিয় থিম
                   </span>
                   <span className="text-xs font-semibold text-indigo-400">{activeTheme.badgeText}</span>
                 </div>
                 <h4 className="text-sm font-bold text-current">{activeTheme.banglaName}</h4>
-                <p className={`text-[11px] ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+                <p className={`text-[11px] max-w-sm ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                   {activeTheme.description}
                 </p>
               </div>
             </div>
 
-            {/* Opacity / Tint Controller */}
-            <div className={`w-full sm:w-64 p-3 rounded-xl border space-y-2 shrink-0 ${
-              darkMode ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-slate-200 shadow-sm'
-            }`}>
-              <div className="flex items-center justify-between text-[11px] font-medium">
-                <span className="flex items-center gap-1.5 text-gray-400">
-                  <Sliders className="w-3.5 h-3.5 text-indigo-400" />
-                  ব্যাকগ্রাউন্ড দৃশ্যমানতা (Tint)
-                </span>
-                <span className="font-bold text-indigo-400">{themeOverlayOpacity}%</span>
+            {/* Opacity / Tint Controller & Close Button */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
+              <div className={`p-3 rounded-xl border space-y-2 flex-1 sm:w-64 ${
+                darkMode ? 'bg-[#0E0E12] border-white/5' : 'bg-white border-slate-200 shadow-sm'
+              }`}>
+                <div className="flex items-center justify-between text-[11px] font-medium">
+                  <span className="flex items-center gap-1.5 text-gray-400">
+                    <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+                    ওয়ালপেপার আলো / টিন্ট
+                  </span>
+                  <span className="font-bold text-indigo-400">{themeOverlayOpacity}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="10"
+                  max="85"
+                  step="5"
+                  value={themeOverlayOpacity}
+                  onChange={(e) => setThemeOverlayOpacity(Number(e.target.value))}
+                  className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+                <div className="flex justify-between items-center text-[9px] text-gray-400">
+                  <button 
+                    type="button" 
+                    onClick={() => setThemeOverlayOpacity(20)}
+                    className="hover:text-indigo-400 font-semibold"
+                  >
+                    উজ্জ্বল ২০%
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setThemeOverlayOpacity(35)}
+                    className="hover:text-indigo-400 font-semibold text-indigo-400"
+                  >
+                    ব্যালেন্সড ৩৫%
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setThemeOverlayOpacity(65)}
+                    className="hover:text-indigo-400 font-semibold"
+                  >
+                    ডার্ক ৬৫%
+                  </button>
+                </div>
               </div>
-              <input
-                type="range"
-                min="45"
-                max="95"
-                step="5"
-                value={themeOverlayOpacity}
-                onChange={(e) => setThemeOverlayOpacity(Number(e.target.value))}
-                className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-              />
-              <div className="flex justify-between text-[9px] text-gray-500">
-                <span>স্পষ্ট ছবি (Clear)</span>
-                <span>গভীর অন্ধকার (Focus)</span>
-              </div>
+
+              <button
+                onClick={onClose}
+                className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-1.5 shrink-0 transition-transform active:scale-95"
+              >
+                <span>প্রয়োগ ও মূল পেজে যান</span>
+                <Check className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -304,17 +354,21 @@ export const ThemeSelectorModal: React.FC<ThemeSelectorModalProps> = ({ isOpen, 
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleSelectTheme(theme);
+                          if (isSelected) {
+                            onClose();
+                          } else {
+                            handleSelectTheme(theme);
+                          }
                         }}
-                        className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors ${
                           isSelected
-                            ? 'bg-indigo-600 text-white'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs'
                             : darkMode
-                              ? 'bg-white/5 hover:bg-indigo-600 hover:text-white text-gray-300'
-                              : 'bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-700'
+                              ? 'bg-indigo-600/20 hover:bg-indigo-600 hover:text-white text-indigo-300'
+                              : 'bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700'
                         }`}
                       >
-                        {isSelected ? 'অ্যাক্টিভ' : 'প্রয়োগ করুন'}
+                        {isSelected ? '✓ সক্রিয় (বন্ধ করুন)' : 'প্রয়োগ করুন'}
                       </button>
                     </div>
                   </div>

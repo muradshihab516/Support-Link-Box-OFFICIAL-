@@ -18,9 +18,11 @@ import {
   Wrench,
   Trophy,
   LayoutDashboard,
-  Play
+  Play,
+  Palette
 } from 'lucide-react';
 import { AuthModal } from '../auth/AuthModal';
+import { ThemeSelectorModal } from '../theme/ThemeSelectorModal';
 
 interface NavbarProps {
   currentView: string;
@@ -37,6 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
     switchCommunity, 
     darkMode, 
     toggleDarkMode, 
+    activeTheme,
     notifications, 
     markNotificationRead, 
     markAllNotificationsRead,
@@ -46,6 +49,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
   } = useApp();
 
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showCommDropdown, setShowCommDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
@@ -228,13 +232,47 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
                 <span className="text-[10px] text-gray-500">left</span>
               </div>
 
-              {/* Dark Mode Toggle */}
+              {/* Theme Presets Button */}
+              <button
+                onClick={() => setShowThemeModal(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                  darkMode 
+                    ? 'bg-indigo-600/15 hover:bg-indigo-600/25 border-indigo-500/30 text-indigo-300' 
+                    : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700 shadow-xs'
+                }`}
+                title="থিম ও ব্যাকগ্রাউন্ড ওয়ালপেপার নির্বাচন করুন"
+              >
+                <Palette className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline font-bold">থিম</span>
+                {activeTheme && (
+                  <span className="hidden md:inline text-[10px] opacity-75 max-w-[70px] truncate">
+                    ({activeTheme.banglaName.split(' ')[0]})
+                  </span>
+                )}
+              </button>
+
+              {/* Dark / Day Mode Toggle */}
               <button
                 onClick={toggleDarkMode}
-                aria-label="Toggle theme"
-                className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-[#1E1E20] transition-colors border border-transparent hover:border-[#1E1E20]"
+                aria-label="Toggle theme mode"
+                className={`p-2 rounded-lg transition-colors border flex items-center gap-1.5 ${
+                  darkMode 
+                    ? 'text-amber-400 hover:text-amber-300 hover:bg-white/5 border-white/5' 
+                    : 'text-indigo-600 hover:text-indigo-800 hover:bg-slate-100 border-slate-200'
+                }`}
+                title={darkMode ? "ডে মোডে যান (Light Mode)" : "ডার্ক মোডে যান (Dark Mode)"}
               >
-                {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+                {darkMode ? (
+                  <>
+                    <Sun className="w-4 h-4 text-amber-400" />
+                    <span className="text-[11px] font-semibold text-amber-300 hidden xl:inline">ডে</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-4 h-4 text-indigo-600" />
+                    <span className="text-[11px] font-semibold text-indigo-700 hidden xl:inline">ডার্ক</span>
+                  </>
+                )}
               </button>
 
               {/* Notification Dropdown */}
@@ -350,6 +388,14 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
                       </button>
 
                       <button
+                        onClick={() => { setShowThemeModal(true); setShowUserDropdown(false); }}
+                        className="w-full text-left px-3.5 py-2 text-xs text-indigo-400 hover:bg-[#1E1E20] flex items-center gap-2 font-medium"
+                      >
+                        <Palette className="w-4 h-4 text-indigo-400" />
+                        থিম গ্যালারি (Wallpapers)
+                      </button>
+
+                      <button
                         onClick={() => { setShowAuthModal(true); setShowUserDropdown(false); }}
                         className="w-full text-left px-3.5 py-2 text-xs text-indigo-400 hover:bg-[#1E1E20] flex items-center gap-2 font-medium"
                       >
@@ -396,6 +442,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
       <AuthModal 
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
+      />
+
+      {/* Theme Presets & Wallpaper Gallery Modal */}
+      <ThemeSelectorModal
+        isOpen={showThemeModal}
+        onClose={() => setShowThemeModal(false)}
       />
     </>
   );

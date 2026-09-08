@@ -577,6 +577,31 @@ export interface MovieItem {
   updatedAt: string;
 }
 
+// Movie Request System
+export type MovieRequestStatus = 'pending' | 'processing' | 'available' | 'rejected';
+
+export interface MovieRequestItem {
+  id: string;
+  title: string;
+  year?: number | string;
+  language?: string;
+  preferredQuality?: string;
+  imdbOrRefUrl?: string;
+  notes?: string;
+  requestedByUserId: string;
+  requestedByName: string;
+  requestedByUsername: string;
+  requestedByAvatar?: string;
+  status: MovieRequestStatus;
+  upvotes: string[];
+  adminReply?: string;
+  fulfilledMovieId?: string;
+  downloadLink?: string;
+  createdAt: string;
+  createdAtTimestamp: number;
+  updatedAt?: string;
+}
+
 // Background Picture Theme Presets
 export interface ThemePreset {
   id: string;
@@ -590,5 +615,6 @@ export interface ThemePreset {
   glowColor: string;
   badgeText: string;
   tagline: string;
+  gradientFallback?: string;
 }
 

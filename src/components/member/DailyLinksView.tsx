@@ -28,7 +28,10 @@ import {
   Edit3,
   Trash2,
   Lock,
-  Calendar
+  Calendar,
+  Palette,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
 import { LinkEditModal } from './LinkEditModal';
@@ -36,6 +39,7 @@ import { ScheduledLinksModal } from './ScheduledLinksModal';
 import { InAppPostViewerModal } from './InAppPostViewerModal';
 import { PlaylistSupportSession } from './PlaylistSupportSession';
 import { ReportModal } from './ReportModal';
+import { ThemeSelectorModal } from '../theme/ThemeSelectorModal';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
 import { DisplayAdSlot } from '../monetization/DisplayAdSlot';
 import confetti from 'canvas-confetti';
@@ -66,7 +70,10 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
     markLinkSupported, 
     unmarkLinkSupported,
     removeDailyLink,
-    completeLateAllDone
+    completeLateAllDone,
+    darkMode,
+    toggleDarkMode,
+    activeTheme
   } = useApp();
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
@@ -79,6 +86,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const [showScheduledModal, setShowScheduledModal] = useState(false);
   const [showPenaltyAdModal, setShowPenaltyAdModal] = useState(false);
   const [showLateReportModal, setShowLateReportModal] = useState(false);
+  const [showThemeSelectorModal, setShowThemeSelectorModal] = useState(false);
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
   const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string; number?: number; memberId?: string; url?: string } | null>(null);
 
@@ -259,27 +267,107 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
     ? Math.min(100, Math.round((effectiveCompletedCount / stats.requiredCount) * 100))
     : 0;
 
+  const renderTopThemeBar = () => (
+    <div className={`w-full p-3.5 sm:p-4 rounded-2xl border backdrop-blur-md shadow-xl transition-all duration-300 ${
+      darkMode 
+        ? 'bg-[#121217]/85 border-white/10 text-white' 
+        : 'bg-white/85 border-slate-200 text-slate-900 shadow-slate-200/50'
+    }`}>
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+        
+        {/* Left: Active Theme Info & View Switcher */}
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`font-semibold ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>ওয়ালপেপার:</span>
+          <span className="font-bold px-2.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-400 border border-indigo-500/25">
+            {activeTheme?.banglaName || 'ডিফল্ট'}
+          </span>
+          {viewMode === 'playlist' ? (
+            <button
+              onClick={() => setViewMode('grid')}
+              className="ml-2 px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-[11px] font-semibold rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <LayoutGrid className="w-3 h-3 text-indigo-400" />
+              <span>কার্ড গ্রিড</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setViewMode('playlist')}
+              className="ml-2 px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-[11px] font-semibold rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Play className="w-3 h-3 text-indigo-400" />
+              <span>সাপোর্ট প্লেলিস্ট</span>
+            </button>
+          )}
+        </div>
+
+        {/* Center: "Support Link Box" prominent centered title as requested */}
+        <div className="text-center px-2 flex-1">
+          <div className="inline-flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <h2 className="text-lg sm:text-xl md:text-2xl font-black tracking-tight bg-gradient-to-r from-indigo-400 via-pink-400 to-amber-300 bg-clip-text text-transparent uppercase font-mono">
+              Support Link Box
+            </h2>
+            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+          </div>
+          <p className={`text-[11px] font-medium tracking-wide ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
+            সবার উপরে ডে/ডার্ক টগল • মাঝে সাপোর্ট লিংক বক্স • মন মতো থিম নির্বাচন
+          </p>
+        </div>
+
+        {/* Right: Dark / Day Toggle & Theme Gallery Button */}
+        <div className="flex items-center justify-center gap-2 shrink-0">
+          {/* Dark / Day Toggle */}
+          <button
+            onClick={toggleDarkMode}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
+              darkMode 
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20 shadow-xs' 
+                : 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100 shadow-xs'
+            }`}
+            title={darkMode ? "ডে মোডে যান (Day Mode)" : "ডার্ক মোডে যান (Dark Mode)"}
+          >
+            {darkMode ? (
+              <>
+                <Sun className="w-4 h-4 text-amber-400" />
+                <span>ডে মোড</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-indigo-600" />
+                <span>ডার্ক মোড</span>
+              </>
+            )}
+          </button>
+
+          {/* Theme Selector Modal Trigger */}
+          <button
+            onClick={() => setShowThemeSelectorModal(true)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-md shadow-indigo-600/25 transition-all hover:scale-[1.02] active:scale-95"
+            title="ওয়ালপেপার ও ব্যাকগ্রাউন্ড থিম নির্বাচন করুন"
+          >
+            <Palette className="w-3.5 h-3.5" />
+            <span>থিম পরিবর্তন</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   // Render Playlist Support Session UI if selected
   if (viewMode === 'playlist') {
     return (
-      <div className="max-w-6xl mx-auto px-2 sm:px-4 py-3 sm:py-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setViewMode('grid')}
-            className="px-3.5 py-1.5 bg-[#141418] hover:bg-[#1E1E24] border border-[#24242E] text-gray-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
-          >
-            <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
-            <span>← কার্ড গ্রিড ভিউতে দেখুন</span>
-          </button>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 font-medium">সাপোর্ট সেশন (প্লেলিস্ট মোড)</span>
-          </div>
-        </div>
+      <div className="max-w-6xl mx-auto px-2 sm:px-4 py-3 sm:py-5 space-y-4">
+        {renderTopThemeBar()}
 
         <PlaylistSupportSession
           initialLinkId={selectedPlayerLinkId}
           onClose={() => setViewMode('grid')}
+        />
+
+        {/* Theme Presets & Wallpaper Gallery Modal */}
+        <ThemeSelectorModal
+          isOpen={showThemeSelectorModal}
+          onClose={() => setShowThemeSelectorModal(false)}
         />
       </div>
     );
@@ -287,6 +375,9 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6">
+      
+      {/* Topmost Theme & Day/Night Toggle Bar with Centered "Support Link Box" */}
+      {renderTopThemeBar()}
       
       {/* Suspended Member Notice */}
       {currentUser && currentUser.status === 'suspended' && (
@@ -704,12 +795,18 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
           return (
             <div
               key={link.id}
-              className={`rounded-2xl border transition-all duration-150 flex flex-col justify-between overflow-hidden shadow-xs ${
-                isOwnLink
-                  ? 'bg-indigo-500/5 border-indigo-500/30'
-                  : isSupported
-                  ? 'bg-green-500/5 border-green-500/30 ring-1 ring-green-500/20'
-                  : 'bg-[#131315] border-[#1E1E20] hover:border-indigo-500/40'
+              className={`rounded-2xl border transition-all duration-200 flex flex-col justify-between overflow-hidden shadow-lg backdrop-blur-md ${
+                darkMode
+                  ? isOwnLink
+                    ? 'bg-indigo-950/40 border-indigo-500/40 shadow-indigo-500/10'
+                    : isSupported
+                    ? 'bg-emerald-950/25 border-emerald-500/30 shadow-emerald-500/10'
+                    : 'bg-[#131317]/85 border-white/10 hover:border-indigo-500/40 hover:bg-[#181822]/90'
+                  : isOwnLink
+                    ? 'bg-indigo-50/90 border-indigo-300 shadow-indigo-500/10'
+                    : isSupported
+                    ? 'bg-emerald-50/90 border-emerald-300 shadow-emerald-500/10'
+                    : 'bg-white/90 border-slate-200 hover:border-indigo-400 hover:bg-white shadow-slate-200/50'
               }`}
             >
               <div className="p-4 sm:p-5 space-y-3 flex-1">
@@ -722,7 +819,9 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                       className="w-10 h-10 rounded-full object-cover ring-1 ring-gray-700 shrink-0" 
                     />
                     <div className="min-w-0">
-                      <div className="text-xs sm:text-sm font-bold text-white truncate flex items-center gap-1.5">
+                      <div className={`text-xs sm:text-sm font-bold truncate flex items-center gap-1.5 ${
+                        darkMode ? 'text-white' : 'text-slate-900'
+                      }`}>
                         {link.memberName}
                         {isOwnLink && (
                           <span className="text-[9px] font-bold uppercase px-1.5 py-0.2 bg-indigo-600 text-white rounded">
@@ -730,7 +829,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-gray-500 truncate">
+                      <div className={`text-[11px] truncate ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                         @{link.memberUsername} • {link.submittedAt}
                       </div>
                     </div>
@@ -745,7 +844,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                         #{link.linkNumber}
                       </div>
                     </div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">
+                    <div className={`text-[10px] mt-0.5 ${darkMode ? 'text-gray-400' : 'text-slate-500'}`}>
                       {link.supportCount + (optimisticStatus[link.id] && !supportedSet.has(link.id) ? 1 : 0)} supports
                     </div>
                   </div>
@@ -803,36 +902,50 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
                   </div>
                 )}
 
-                {/* Caption / Note */}
-                <div className="p-3 bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-xs text-gray-300 min-h-[52px] space-y-2">
+                {/* Centered "Support Link Box" header & Caption / Note */}
+                <div className={`p-3 sm:p-4 rounded-xl border text-xs text-center flex flex-col items-center justify-center min-h-[60px] space-y-2 transition-colors ${
+                  darkMode 
+                    ? 'bg-[#0E0E12]/80 border-white/5 text-gray-200' 
+                    : 'bg-slate-50/90 border-slate-200 text-slate-700'
+                }`}>
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-bold text-indigo-400">
+                    <span>Support Link Box</span>
+                    <span>•</span>
+                    <span className="font-mono">#{link.linkNumber}</span>
+                  </div>
+
                   {link.caption ? (
-                    <p className="line-clamp-2 italic font-normal">
+                    <p className="line-clamp-2 italic font-medium text-center max-w-md mx-auto">
                       "{link.caption}"
                     </p>
                   ) : (
-                    <span className="text-gray-500 italic">
+                    <span className={`italic text-center text-xs ${darkMode ? 'text-gray-500' : 'text-slate-400'}`}>
                       Support exchange post on Facebook. React and comment!
                     </span>
                   )}
 
                   {/* Support Instruction if provided */}
                   {link.instruction && (
-                    <div className="pt-2 border-t border-[#1E1E20]/80">
-                      <span className="text-[10px] font-bold text-indigo-400 block">🎯 দিকনির্দেশনা:</span>
-                      <p className="text-[11px] text-indigo-200 mt-0.5 line-clamp-2">{link.instruction}</p>
+                    <div className="pt-1.5 border-t border-white/5 w-full text-center">
+                      <span className="text-[10px] font-bold text-indigo-400 inline-flex items-center gap-1 justify-center">
+                        🎯 দিকনির্দেশনা:
+                      </span>
+                      <p className="text-[11px] text-indigo-300 mt-0.5 line-clamp-2 text-center font-medium">
+                        {link.instruction}
+                      </p>
                     </div>
                   )}
                 </div>
 
-                {/* Status Indicator Badge */}
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-gray-500 text-[11px]">Support Status:</span>
-                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full transition-all duration-200 ${
+                {/* Status Indicator Badge - Centered */}
+                <div className="flex items-center justify-center gap-2 text-xs pt-1">
+                  <span className={`${darkMode ? 'text-gray-400' : 'text-slate-500'} text-[11px]`}>Support Status:</span>
+                  <span className={`text-[11px] font-bold px-3 py-0.5 rounded-full transition-all duration-200 ${
                     isOwnLink 
-                      ? 'bg-[#1E1E20] text-gray-400'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
                       : isSupported 
-                      ? 'bg-green-500/20 text-green-300 border border-green-500/30 scale-105' 
-                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 scale-105' 
+                      : 'bg-amber-500/15 text-amber-400 border border-amber-500/25'
                   }`}>
                     {isOwnLink ? 'Your Own Link' : isSupported ? '✓ Supported' : '○ Pending'}
                   </span>
@@ -840,7 +953,9 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
               </div>
 
               {/* Card Footer Actions - Direct native <a> tag for native OS intent handling & App swipe */}
-              <div className="p-3 sm:px-4 sm:py-3 bg-[#0E0E10] border-t border-[#1E1E20] flex items-center justify-between gap-2">
+              <div className={`p-3 sm:px-4 sm:py-3 border-t flex items-center justify-between gap-2 ${
+                darkMode ? 'bg-[#0E0E12]/90 border-white/5' : 'bg-slate-50/90 border-slate-200'
+              }`}>
                 
                 {/* Native App Link */}
                 <a
@@ -1092,6 +1207,12 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       <LateSupportReportModal
         isOpen={showLateReportModal}
         onClose={() => setShowLateReportModal(false)}
+      />
+
+      {/* Theme Presets & Wallpaper Gallery Modal */}
+      <ThemeSelectorModal
+        isOpen={showThemeSelectorModal}
+        onClose={() => setShowThemeSelectorModal(false)}
       />
     </div>
   );

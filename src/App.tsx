@@ -31,8 +31,32 @@ const getInitialView = (): string => {
 };
 
 const AppContent: React.FC = () => {
-  const { currentMember, activeReportModalId, setActiveReportModalId } = useApp();
+  const { 
+    currentMember, 
+    activeReportModalId, 
+    setActiveReportModalId,
+    darkMode,
+    activeTheme,
+    themeOverlayOpacity
+  } = useApp();
   const [currentView, setCurrentViewState] = useState<string>(getInitialView);
+
+  // Sync dark mode class on document element
+  React.useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [darkMode]);
+
+  // Dynamic CSS variables for active theme colors
+  React.useEffect(() => {
+    if (activeTheme?.accentColor) {
+      document.documentElement.style.setProperty('--theme-accent', activeTheme.accentColor);
+      document.documentElement.style.setProperty('--theme-glow', activeTheme.glowColor);
+    }
+  }, [activeTheme]);
 
   const setCurrentView = (view: string) => {
     setCurrentViewState(view);
@@ -132,27 +156,65 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0B] text-gray-200 flex flex-col font-sans transition-colors duration-200 selection:bg-indigo-600 selection:text-white">
+    <div className={`min-h-screen relative flex flex-col font-sans transition-colors duration-300 selection:bg-indigo-600 selection:text-white ${
+      darkMode ? 'text-gray-200' : 'text-slate-800'
+    }`}>
       
+      {/* Dynamic HD Theme Background Wallpaper & Gradient Engine */}
+      <div 
+        className="fixed inset-0 pointer-events-none z-0 overflow-hidden transition-all duration-700 ease-out"
+        style={{ 
+          background: activeTheme?.gradientFallback || (darkMode ? 'linear-gradient(135deg, #090B18 0%, #150C28 50%, #05050A 100%)' : 'linear-gradient(135deg, #F8FAFC 0%, #EDF2F7 100%)')
+        }}
+      >
+        {activeTheme?.bgImageUrl && (
+          <img 
+            key={activeTheme.id + (activeTheme.bgImageUrl || '')}
+            src={activeTheme.bgImageUrl}
+            alt={activeTheme.name}
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
+            className="w-full h-full object-cover select-none transition-opacity duration-700"
+            style={{ 
+              filter: darkMode ? 'brightness(0.9) contrast(1.08)' : 'brightness(0.96) contrast(1.02)'
+            }}
+          />
+        )}
+
+        {/* Day / Dark overlay tint - smooth gradient to guarantee perfect contrast and readability */}
+        <div 
+          className={`absolute inset-0 transition-colors duration-500 ${
+            darkMode 
+              ? 'bg-gradient-to-b from-[#08080C]/65 via-[#08080C]/35 to-[#08080C]/75' 
+              : 'bg-gradient-to-b from-white/75 via-white/50 to-white/80'
+          }`}
+          style={{ opacity: Math.min(0.9, Math.max(0.05, themeOverlayOpacity / 100)) }}
+        />
+      </div>
+
       {/* Top Navigation */}
-      <Navbar
-        currentView={currentView}
-        onNavigate={(view) => setCurrentView(view)}
-        onSubmitLink={() => setIsSubmitModalOpen(true)}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-      />
+      <div className="relative z-40">
+        <Navbar
+          currentView={currentView}
+          onNavigate={(view) => setCurrentView(view)}
+          onSubmitLink={() => setIsSubmitModalOpen(true)}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        />
+      </div>
 
       {/* Main View Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pb-20 sm:pb-12 pt-2">
+      <main className="relative z-10 flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pb-20 sm:pb-12 pt-2">
         {renderView()}
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <MobileNav
-        currentView={currentView}
-        onNavigate={(view) => setCurrentView(view)}
-        onSubmitLink={() => setIsSubmitModalOpen(true)}
-      />
+      <div className="relative z-40">
+        <MobileNav
+          currentView={currentView}
+          onNavigate={(view) => setCurrentView(view)}
+          onSubmitLink={() => setIsSubmitModalOpen(true)}
+        />
+      </div>
 
       {/* Modals */}
       <LinkSubmissionModal

@@ -34,6 +34,8 @@ import {
   LateSupportReportStatus,
   MovieItem,
   MovieFormatLink,
+  MovieRequestItem,
+  MovieRequestStatus,
   ThemePreset
 } from '../types';
 import { THEME_PRESETS, DEFAULT_THEME_ID } from '../data/themePresets';
@@ -61,7 +63,7 @@ import {
   INITIAL_REWARD_REDEMPTIONS,
   INITIAL_LATE_SUPPORT_REPORTS
 } from '../data/seedData';
-import { INITIAL_MOVIES, generateRandomToken } from '../data/mockMovies';
+import { INITIAL_MOVIES, INITIAL_MOVIE_REQUESTS, generateRandomToken } from '../data/mockMovies';
 
 import { cleanAndFormatFacebookUrl } from '../utils/facebookLinks';
 import { 
@@ -304,6 +306,26 @@ interface AppContextType {
   incrementMovieViews: (id: string) => void;
   resolveDownloadToken: (token: string) => { success: boolean; destinationUrl?: string; movie?: MovieItem; link?: MovieFormatLink; error?: string };
   recordDownloadClick: (token: string) => void;
+
+  // Movie Request System
+  movieRequests: MovieRequestItem[];
+  submitMovieRequest: (data: {
+    title: string;
+    year?: number | string;
+    language?: string;
+    preferredQuality?: string;
+    imdbOrRefUrl?: string;
+    notes?: string;
+  }) => { success: boolean; message: string; request?: MovieRequestItem };
+  upvoteMovieRequest: (requestId: string) => { success: boolean; upvoted: boolean; count: number; message: string };
+  updateMovieRequestStatus: (
+    requestId: string,
+    status: MovieRequestStatus,
+    adminReply?: string,
+    downloadLink?: string,
+    fulfilledMovieId?: string
+  ) => { success: boolean; message: string };
+  deleteMovieRequest: (requestId: string) => { success: boolean; message: string };
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -337,6 +359,7 @@ const STORAGE_KEYS = {
   FASTEST_SUPPORTERS: 'slb_fastest_supporters_v4',
   LATE_SUPPORT_REPORTS: 'slb_late_support_reports_v4',
   MOVIES: 'slb_movies_v4',
+  MOVIE_REQUESTS: 'slb_movie_requests_v4',
   THEME_ID: 'slb_theme_id_v4',
   CUSTOM_BG_URL: 'slb_custom_bg_url_v4',
   THEME_OPACITY: 'slb_theme_opacity_v4'
@@ -505,6 +528,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch {}
   }, [movies]);
 
+  const [movieRequests, setMovieRequests] = useState<MovieRequestItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MOVIE_REQUESTS);
+    return saved ? JSON.parse(saved) : INITIAL_MOVIE_REQUESTS;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MOVIE_REQUESTS, JSON.stringify(movieRequests));
+    } catch {}
+  }, [movieRequests]);
+
   const [currentCommunityId, setCurrentCommunityId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEYS.COMMUNITY_ID) || 'comm_default';
   });
@@ -528,7 +562,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [themeOverlayOpacity, setThemeOverlayOpacity] = useState<number>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.THEME_OPACITY);
-    return saved ? Number(saved) : 80;
+    if (!saved || saved === '80') return 30;
+    return Number(saved);
   });
 
   useEffect(() => {
@@ -3542,6 +3577,155 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
   };
 
+  // Movie Request System Handlers
+  const submitMovieRequest = (data: {
+    title: string;
+    year?: number | string;
+    language?: string;
+    preferredQuality?: string;
+    imdbOrRefUrl?: string;
+    notes?: string;
+  }) => {
+    if (!data.title.trim()) {
+      return { success: false, message: 'মুভির নাম অবশ্যই প্রদান করতে হবে।' };
+    }
+
+    const requester = currentUser || members.find(m => m.id === currentUserId) || members[0];
+    const newReqId = `req_${Date.now()}`;
+    const nowIso = new Date().toISOString();
+
+    const newRequest: MovieRequestItem = {
+      id: newReqId,
+      title: data.title.trim(),
+      year: data.year ? (typeof data.year === 'string' ? parseInt(data.year, 10) || data.year : data.year) : undefined,
+      language: data.language?.trim() || 'English / Dual Audio',
+      preferredQuality: data.preferredQuality || '1080p FHD',
+      imdbOrRefUrl: data.imdbOrRefUrl?.trim(),
+      notes: data.notes?.trim(),
+      requestedByUserId: requester.id,
+      requestedByName: requester.name,
+      requestedByUsername: requester.username,
+      requestedByAvatar: requester.avatar,
+      status: 'pending',
+      upvotes: [requester.id],
+      createdAt: nowIso,
+      createdAtTimestamp: Date.now()
+    };
+
+    setMovieRequests(prev => [newRequest, ...prev]);
+    addAuditLog('SUBMIT_MOVIE_REQUEST', 'movie', newReqId, newRequest.title, `${requester.name} requested movie "${newRequest.title}"`);
+
+    // Add in-app confirmation notification
+    setNotifications(prev => [
+      {
+        id: `notif_mov_req_${Date.now()}`,
+        userId: requester.id,
+        type: 'announcement',
+        title: '🎬 মুভি রিকোয়েস্ট গৃহীত হয়েছে!',
+        message: `আপনার অনুরোধকৃত মুভি "${newRequest.title}" রিভিউ তালিকায় যোগ হয়েছে। অন্যান্য মেম্বাররা এতে ভোট দিতে পারবেন।`,
+        timestamp: 'এখনই',
+        read: false
+      },
+      ...prev
+    ]);
+
+    return {
+      success: true,
+      message: `✓ আপনার "${newRequest.title}" মুভি রিকোয়েস্ট সফলভাবে সাবমিট হয়েছে!`,
+      request: newRequest
+    };
+  };
+
+  const upvoteMovieRequest = (requestId: string) => {
+    const userId = currentUser?.id || currentUserId || 'guest_user';
+    let isUpvoted = false;
+    let newCount = 0;
+
+    setMovieRequests(prev => prev.map(req => {
+      if (req.id === requestId) {
+        const hasUpvoted = req.upvotes.includes(userId);
+        let updatedUpvotes: string[];
+        if (hasUpvoted) {
+          updatedUpvotes = req.upvotes.filter(id => id !== userId);
+          isUpvoted = false;
+        } else {
+          updatedUpvotes = [...req.upvotes, userId];
+          isUpvoted = true;
+        }
+        newCount = updatedUpvotes.length;
+        return {
+          ...req,
+          upvotes: updatedUpvotes,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return req;
+    }));
+
+    return {
+      success: true,
+      upvoted: isUpvoted,
+      count: newCount,
+      message: isUpvoted ? '✓ আপনি এই মুভিতে ভোট দিয়েছেন!' : 'ভোট প্রত্যাহার করা হয়েছে।'
+    };
+  };
+
+  const updateMovieRequestStatus = (
+    requestId: string,
+    status: MovieRequestStatus,
+    adminReply?: string,
+    downloadLink?: string,
+    fulfilledMovieId?: string
+  ) => {
+    let targetReq: MovieRequestItem | undefined;
+
+    setMovieRequests(prev => prev.map(req => {
+      if (req.id === requestId) {
+        targetReq = req;
+        return {
+          ...req,
+          status,
+          adminReply: adminReply !== undefined ? adminReply : req.adminReply,
+          downloadLink: downloadLink !== undefined ? downloadLink : req.downloadLink,
+          fulfilledMovieId: fulfilledMovieId !== undefined ? fulfilledMovieId : req.fulfilledMovieId,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return req;
+    }));
+
+    if (targetReq) {
+      addAuditLog('UPDATE_MOVIE_REQUEST', 'movie', requestId, targetReq.title, `Admin updated status of movie request "${targetReq.title}" to ${status}`);
+
+      // Notify the requester if status is available or processing
+      if (status === 'available') {
+        setNotifications(prev => [
+          {
+            id: `notif_req_done_${Date.now()}`,
+            userId: targetReq!.requestedByUserId,
+            type: 'announcement',
+            title: '🎉 আপনার রিকোয়েস্টকৃত মুভি রেডি!',
+            message: `আপনার রিকোয়েস্টকৃত মুভি "${targetReq!.title}" আপলোড করা হয়েছে। সরাসরি মুভি বক্স থেকে ডাউনলোড করতে পারবেন!`,
+            timestamp: 'এখনই',
+            read: false
+          },
+          ...prev
+        ]);
+      }
+    }
+
+    return { success: true, message: '✓ মুভি রিকোয়েস্টের স্ট্যাটাস সফলভাবে আপডেট করা হয়েছে।' };
+  };
+
+  const deleteMovieRequest = (requestId: string) => {
+    const target = movieRequests.find(r => r.id === requestId);
+    setMovieRequests(prev => prev.filter(r => r.id !== requestId));
+    if (target) {
+      addAuditLog('DELETE_MOVIE_REQUEST', 'movie', requestId, target.title, `Deleted movie request "${target.title}"`);
+    }
+    return { success: true, message: '✓ মুভি রিকোয়েস্ট মুছে ফেলা হয়েছে।' };
+  };
+
   // -------------------------------------------------------------
   // STORAGE-EFFICIENT POINT SYSTEM & DATA LIFECYCLE ENGINE
   // -------------------------------------------------------------
@@ -4193,7 +4377,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         toggleMovieStatus,
         incrementMovieViews,
         resolveDownloadToken,
-        recordDownloadClick
+        recordDownloadClick,
+
+        // Movie Request System
+        movieRequests,
+        submitMovieRequest,
+        upvoteMovieRequest,
+        updateMovieRequestStatus,
+        deleteMovieRequest
       }}
     >
       {children}

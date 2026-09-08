@@ -609,7 +609,7 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6rem)] max-w-5xl mx-auto rounded-2xl overflow-hidden bg-[#0A0A0D] border border-[#1E1E24] shadow-2xl relative">
+    <div className="flex flex-col h-[calc(100vh-6rem)] max-w-5xl mx-auto rounded-2xl overflow-hidden bg-[#0A0A0D]/90 backdrop-blur-md border border-white/10 shadow-2xl relative">
       
       {/* =========================================================================
           TOP NOTIFICATION BANNER (Floating Feedback with Safeguard Alert Styling)

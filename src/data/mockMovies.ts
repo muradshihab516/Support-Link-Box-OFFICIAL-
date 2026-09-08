@@ -1,4 +1,4 @@
-import { MovieItem } from '../types';
+import { MovieItem, MovieRequestItem } from '../types';
 
 export const generateRandomToken = (length: number = 8): string => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
@@ -226,3 +226,81 @@ export const INITIAL_MOVIES: MovieItem[] = [
     updatedAt: '2026-03-04T08:00:00Z'
   }
 ];
+
+export const INITIAL_MOVIE_REQUESTS: MovieRequestItem[] = [
+  {
+    id: 'req_deadpool_wolverine',
+    title: 'Deadpool & Wolverine',
+    year: 2024,
+    language: 'English (Dual Audio / Bangla Sub)',
+    preferredQuality: '1080p FHD',
+    imdbOrRefUrl: 'https://www.imdb.com/title/tt6263850/',
+    notes: 'মার্ভেলের নতুন ডেডপুল ও উলভারিন মুভিটি ১০৮০পি বা ৭২০পিতে প্রয়োজন। বাংলা সাবটাইটেল থাকলে ভালো হয়।',
+    requestedByUserId: 'user_tanzim',
+    requestedByName: 'Tanzimul Islam',
+    requestedByUsername: 'tanzim_islam',
+    requestedByAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
+    status: 'available',
+    upvotes: ['user_tanzim', 'user_emon', 'user_sakib', 'user_rakib', 'user_salman'],
+    adminReply: '✓ মুভিটি হাই-স্পিড ক্লাউড সার্ভারে আপলোড করা হয়েছে! আমাদের মুভি বক্সের Oppenheimer বা ক্লাউড ড্রাইভ সেকশনে পেয়ে যাবেন।',
+    fulfilledMovieId: 'mov_oppenheimer_2023',
+    downloadLink: 'https://gdflex.xyz/file/sample-movie-link',
+    createdAt: '2026-08-25T14:30:00Z',
+    createdAtTimestamp: 1787668200000
+  },
+  {
+    id: 'req_stree_2',
+    title: 'Stree 2: Sarkate Ka Aatank',
+    year: 2024,
+    language: 'Hindi (Original Clean Audio)',
+    preferredQuality: '720p HD',
+    imdbOrRefUrl: 'https://www.imdb.com/title/tt27441998/',
+    notes: 'স্ত্রী ২ মুভির ক্লিয়ার থিয়েটার বা ওটিটি প্রিন্ট চাই ভাইয়া।',
+    requestedByUserId: 'user_rakib',
+    requestedByName: 'Rakibul Hasan',
+    requestedByUsername: 'rakib_hasan',
+    requestedByAvatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150',
+    status: 'processing',
+    upvotes: ['user_rakib', 'user_emon', 'user_salman', 'user_farhan'],
+    adminReply: 'আমরা ক্লিয়ার ওয়েব-ডিএল প্রিন্টের মিরর লিংক প্রসেস করছি। আগামী ২৪ ঘণ্টার মধ্যে যুক্ত হবে!',
+    createdAt: '2026-08-26T18:15:00Z',
+    createdAtTimestamp: 1787768100000
+  },
+  {
+    id: 'req_toofan_shakib',
+    title: 'তুফান (Toofan)',
+    year: 2024,
+    language: 'বাংলা (Bangla)',
+    preferredQuality: '1080p Web-DL',
+    imdbOrRefUrl: 'https://www.imdb.com/title/tt30419266/',
+    notes: 'শাকিব খানের তুফান মুভির ফুল এইচডি প্রিন্ট কি পাওয়া যাবে?',
+    requestedByUserId: 'user_emon',
+    requestedByName: 'Md Emon',
+    requestedByUsername: 'emon_admin',
+    requestedByAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+    status: 'available',
+    upvotes: ['user_emon', 'user_tanzim', 'user_rakib', 'user_sakib'],
+    adminReply: 'তুফান মুভির হোইচোই ওয়েব-ডিএল কপি ক্লাউড স্টোরেজে রেডি রয়েছে। ডাউনলোড করুন!',
+    downloadLink: 'https://pixeldrain.com/u/sample_toofan_1080p',
+    createdAt: '2026-08-27T09:40:00Z',
+    createdAtTimestamp: 1787823600000
+  },
+  {
+    id: 'req_kalki_2898',
+    title: 'Kalki 2898 AD',
+    year: 2024,
+    language: 'Hindi / South (Dual Audio)',
+    preferredQuality: '1080p FHD',
+    imdbOrRefUrl: 'https://www.imdb.com/title/tt12735488/',
+    notes: 'প্রভাস ও অমিতাভ বচ্চনের কালকি মুভির ফুল এইচডি ডুয়েলে অডিও প্রিন্ট চাই।',
+    requestedByUserId: 'user_sakib',
+    requestedByName: 'Sakib All Hasan',
+    requestedByUsername: 'sakib_hasan',
+    requestedByAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+    status: 'pending',
+    upvotes: ['user_sakib', 'user_tanzim'],
+    createdAt: '2026-08-28T11:20:00Z',
+    createdAtTimestamp: 1787916000000
+  }
+];
+
