@@ -1,0 +1,136 @@
+import { ThemePreset } from '../types';
+
+export const THEME_PRESETS: ThemePreset[] = [
+  {
+    id: 'cosmic_galaxy',
+    name: 'Cosmic Galaxy & Nebula',
+    banglaName: 'কসমিক গ্যালাক্সি ও নীহারিকা',
+    description: 'মহাকাশের হাজারো তারা, গ্যালাক্সি ও নীল-বেগুনি নীহারিকার মায়াবী দৃশ্য',
+    category: 'cosmic',
+    bgImageUrl: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#818CF8',
+    glowColor: 'rgba(129, 140, 248, 0.4)',
+    badgeText: 'Galaxy Space',
+    tagline: 'Deep space cosmic wonder'
+  },
+  {
+    id: 'cyberpunk_neon',
+    name: 'Cyberpunk Neon City',
+    banglaName: 'সাইবারপাঙ্ক নিয়ন সিটি',
+    description: 'ফিউচারিস্টিক নিয়ন আলো, টোকিওর রাতের রাস্তা ও বৃষ্টির প্রতিফলন',
+    category: 'cyberpunk',
+    bgImageUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#F43F5E',
+    glowColor: 'rgba(244, 63, 94, 0.4)',
+    badgeText: 'Neon City',
+    tagline: 'Neo Tokyo vibrant night'
+  },
+  {
+    id: 'aurora_borealis',
+    name: 'Aurora Borealis & Arctic',
+    banglaName: 'নর্দান লাইটস ও মেরুজ্যোতি',
+    description: 'উত্তর মেরুর শান্ত আকাশে সবুজ ও নীলচে মেরুজ্যোতির অপরূপ দ্যুতি',
+    category: 'nature',
+    bgImageUrl: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#10B981',
+    glowColor: 'rgba(16, 185, 129, 0.4)',
+    badgeText: 'Aurora Green',
+    tagline: 'Dancing northern lights'
+  },
+  {
+    id: 'midnight_cinema',
+    name: 'Midnight Cinema & Studio',
+    banglaName: 'মিডনাইট সিনেমা স্টুডিও',
+    description: 'ক্লাসিক সিনেমা হল, লাল ভেলভেট আসন ও ফিল্ম প্রজেক্টরের নস্টালজিক আমেজ',
+    category: 'cinema',
+    bgImageUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#A855F7',
+    glowColor: 'rgba(168, 85, 247, 0.4)',
+    badgeText: 'Film Studio',
+    tagline: 'Cinematic theater vibe'
+  },
+  {
+    id: 'misty_nature',
+    name: 'Misty Mountain Forest',
+    banglaName: 'কুয়াশাচ্ছন্ন সবুজ পাইন বন',
+    description: 'পাহাড়ের বুক চিরে ওঠা সবুজ পাইন বন ও শান্ত রহস্যময় কুয়াশার চাদর',
+    category: 'nature',
+    bgImageUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#14B8A6',
+    glowColor: 'rgba(20, 184, 166, 0.4)',
+    badgeText: 'Misty Forest',
+    tagline: 'Tranquil moody pine ridge'
+  },
+  {
+    id: 'golden_sunset',
+    name: 'Golden Twilight Sunset',
+    banglaName: 'রক্তিম গোধূলি দিগন্ত',
+    description: 'অস্তমিত সূর্যের সোনালী আভা, শান্ত আকাশ ও রক্তিম মেঘের মিষ্টি আলো',
+    category: 'sunset',
+    bgImageUrl: 'https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1495616811223-4d98c6e9c869?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#F59E0B',
+    glowColor: 'rgba(245, 158, 11, 0.4)',
+    badgeText: 'Golden Sunset',
+    tagline: 'Warm golden hour calmness'
+  },
+  {
+    id: 'anime_twilight',
+    name: 'Anime Dream Twilight Sky',
+    banglaName: 'অ্যানিমে টুইলাইট স্কাই',
+    description: 'অ্যানিমেশন ফিল্মের মতো মায়াবী বেগুনি আকাশ, তারকারাজি ও মেঘমালা',
+    category: 'anime',
+    bgImageUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#C084FC',
+    glowColor: 'rgba(192, 132, 252, 0.4)',
+    badgeText: 'Anime Skies',
+    tagline: 'Dreamy anime cloudscapes'
+  },
+  {
+    id: 'royal_obsidian',
+    name: 'Royal Obsidian Luxury',
+    banglaName: 'রয়েল অবসিডিয়ান লাক্সারি',
+    description: 'মসৃণ মেটালিক সিল্ক ওয়েভ, অভিজাত অন্ধকার ব্যাকগ্রাউন্ড ও মিনিমাল লুক',
+    category: 'minimal',
+    bgImageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1920&q=80',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80',
+    accentColor: '#6366F1',
+    glowColor: 'rgba(99, 102, 241, 0.4)',
+    badgeText: 'Liquid Obsidian',
+    tagline: 'Executive metallic flow'
+  },
+  {
+    id: 'minimal_slate',
+    name: 'Pure Studio Slate (No Photo)',
+    banglaName: 'ক্লিন স্টুডিও স্লেট (ছবিহীন)',
+    description: 'সম্পূর্ণ পরিষ্কার ও নিরেট ডার্ক ইন্টারফেস, জিরো ডিসট্র্যাকশন কাজের জন্য',
+    category: 'minimal',
+    bgImageUrl: '',
+    thumbnailUrl: '',
+    accentColor: '#6366F1',
+    glowColor: 'rgba(99, 102, 241, 0.3)',
+    badgeText: 'Studio Clean',
+    tagline: 'Zero-distraction slate'
+  },
+  {
+    id: 'custom_wallpaper',
+    name: 'Custom Wallpaper URL',
+    banglaName: 'কাস্টম ব্যাকগ্রাউন্ড ইমেজ',
+    description: 'আপনার নিজের পছন্দের যেকোনো ছবির ওয়েব লিংক দিয়ে ব্যাকগ্রাউন্ড সাজান',
+    category: 'custom',
+    bgImageUrl: '',
+    thumbnailUrl: '',
+    accentColor: '#EC4899',
+    glowColor: 'rgba(236, 72, 153, 0.4)',
+    badgeText: 'Personal Photo',
+    tagline: 'Custom picture theme'
+  }
+];
+
+export const DEFAULT_THEME_ID = 'cosmic_galaxy';

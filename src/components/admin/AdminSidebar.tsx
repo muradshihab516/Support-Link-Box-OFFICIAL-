@@ -8,29 +8,30 @@ import {
   ShieldAlert, 
   Flag, 
   Trophy, 
-  Megaphone, 
-  TrendingUp, 
-  DollarSign, 
   FileText, 
   Settings, 
   Download,
-  Share2,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Gavel,
+  Database,
+  Clock,
+  Film
 } from 'lucide-react';
 
 export type AdminTab = 
   | 'overview'
+  | 'upload_movie'
   | 'members'
   | 'bulk_import'
   | 'today_links'
   | 'inactive_frozen'
+  | 'punishment'
+  | 'late_reports'
   | 'notices'
   | 'reports'
   | 'weekly_session'
-  | 'sponsors'
-  | 'affiliate'
-  | 'revenue'
+  | 'storage_points'
   | 'audit_logs'
   | 'settings'
   | 'export';
@@ -53,6 +54,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       title: 'Operations',
       items: [
         { id: 'overview', label: 'Admin Overview', icon: LayoutDashboard },
+        { id: 'upload_movie', label: 'Upload Movie (মুভি আপলোড)', icon: Film },
         { id: 'members', label: 'Members Directory', icon: Users },
         { id: 'bulk_import', label: 'Bulk Import', icon: UserPlus },
         { id: 'today_links', label: "Today's Links & Audit", icon: Flame },
@@ -62,22 +64,17 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     {
       title: 'Community Governance',
       items: [
+        { id: 'punishment', label: 'Punishment & Auto-Admin', icon: Gavel },
+        { id: 'late_reports', label: 'Late Support Reports', icon: Clock },
         { id: 'notices', label: 'Notices & Warnings', icon: ShieldAlert },
         { id: 'reports', label: 'Member Reports', icon: Flag },
         { id: 'weekly_session', label: 'Weekly Championship', icon: Trophy },
       ]
     },
     {
-      title: 'Monetization & Growth',
-      items: [
-        { id: 'sponsors', label: 'Sponsors & Ads', icon: Megaphone },
-        { id: 'affiliate', label: 'Affiliate Marketing', icon: Share2 },
-        { id: 'revenue', label: 'Revenue Analytics', icon: DollarSign },
-      ]
-    },
-    {
       title: 'System & Tools',
       items: [
+        { id: 'storage_points', label: 'Storage & Points Lifecycle', icon: Database },
         { id: 'audit_logs', label: 'Audit Logs', icon: FileText },
         { id: 'export', label: 'Export Center (CSV)', icon: Download },
         { id: 'settings', label: 'System Settings', icon: Settings },

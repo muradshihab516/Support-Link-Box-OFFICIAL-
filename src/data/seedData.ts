@@ -13,7 +13,14 @@ import {
   SystemSettings, 
   RevenueRecord,
   Badge,
-  ScheduledLink
+  ScheduledLink,
+  AdminSupportLink,
+  LatePenaltyRecord,
+  PointsHistoryRecord,
+  AdDailyRollup,
+  DataCleanupLog,
+  RewardRedemption,
+  LateSupportReport
 } from '../types';
 
 export const INITIAL_BADGES: Badge[] = [
@@ -109,7 +116,25 @@ export const INITIAL_SETTINGS: SystemSettings = {
   scheduleEnabled: true,
   scheduleStartHourOffset: 2, // default 2 hours after opening (10:00 + 2h = 12:00 PM)
   scheduleAllowedStartTime: '12:00',
-  scheduleAllowedEndTime: '16:50'
+  scheduleAllowedEndTime: '16:50',
+  punishmentEnabled: true,
+  allDoneDeadlineTime: '00:00',
+  lateRecoveryStartTime: '00:00',
+  lateRecoveryEndTime: '10:00',
+  lateRecoveryDurationHours: 10,
+  adsPerLateHour: 1,
+  maxPenaltyAdsCap: 5,
+  adNetworkType: 'rewarded_simulator',
+  cleanupRetentionDays: 7,
+  autoCleanupEnabled: true,
+  googleSheetsMonthlyTabPrefix: 'SLB-Archive',
+  pointRules: {
+    supportPoints: 1,
+    submissionPoints: 5,
+    allDonePoints: 3,
+    fastestSupporterTiers: [10, 8, 6, 4, 2],
+    streakDailyBonus: 2
+  }
 };
 
 const AVATARS = [
@@ -1831,3 +1856,263 @@ export const INITIAL_SCHEDULED_LINKS: ScheduledLink[] = [
     communityId: 'comm_default'
   }
 ];
+
+export const INITIAL_ADMIN_SUPPORT_LINKS: AdminSupportLink[] = [
+  {
+    id: 'supp_admin_1',
+    adminId: 'user_super_admin',
+    adminName: 'Murad Shihab',
+    adminUsername: 'murad_superadmin',
+    adminAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    adminRole: 'super_admin',
+    platformName: 'Facebook Profile',
+    supportUrl: 'https://facebook.com/murad.shihab.official',
+    displayLabel: 'মুরাদ সিহাব (Super Admin Support)',
+    notes: 'জরুরি অ্যাকাউন্ট রি-অ্যাক্টিভেশন বা সাসপেনশন রিভিউ',
+    isActive: true,
+    updatedAt: '2026-08-28 10:00 AM'
+  },
+  {
+    id: 'supp_admin_2',
+    adminId: 'user_naimur',
+    adminName: 'Naimur Rahman',
+    adminUsername: 'naimur_admin',
+    adminAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    adminRole: 'admin',
+    platformName: 'Facebook Messenger',
+    supportUrl: 'https://m.me/naimur.admin.bd',
+    displayLabel: 'নাঈমুর রহমান (Community Admin)',
+    notes: 'সাপোর্ট লিংক ও মেম্বারশিপ সংক্রান্ত হেল্প',
+    isActive: true,
+    updatedAt: '2026-08-28 10:30 AM'
+  },
+  {
+    id: 'supp_admin_3',
+    adminId: 'user_sabbir',
+    adminName: 'Sabbir Hossain',
+    adminUsername: 'sabbir_mod',
+    adminAvatar: 'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150&auto=format&fit=crop&q=80',
+    adminRole: 'moderator',
+    platformName: 'WhatsApp / Telegram',
+    supportUrl: 'https://wa.me/8801700000000',
+    displayLabel: 'সাব্বির হোসেন (Moderation Helpdesk)',
+    notes: 'দৈনিক সাপোর্ট ও রুলস হেল্পডেস্ক',
+    isActive: true,
+    updatedAt: '2026-08-28 11:00 AM'
+  }
+];
+
+export const INITIAL_LATE_PENALTIES: LatePenaltyRecord[] = [
+  {
+    id: 'pen_1',
+    memberId: 'user_rashed',
+    memberName: 'Rashedul Islam',
+    memberUsername: 'rashed_cr7',
+    memberAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+    date: '2026-08-27',
+    deadlineTime: '12:00 AM',
+    completedAt: '01:45 AM',
+    hoursLate: 2,
+    lateDurationFormatted: '১ ঘণ্টা ৪৫ মিনিট',
+    requiredAds: 2,
+    adsWatched: 2,
+    status: 'reactivated',
+    reactivatedAt: '2026-08-28 01:52 AM',
+    adminNotes: 'মেম্বার ২টি ভিডিও Ad দেখে স্বয়ংক্রিয়ভাবে অ্যাকাউন্ট রি-অ্যাক্টিভ করেছেন।',
+    createdAt: '2026-08-28 01:45 AM',
+    createdAtTimestamp: new Date('2026-08-28T01:45:00+06:00').getTime()
+  },
+  {
+    id: 'pen_2',
+    memberId: 'user_khalid',
+    memberName: 'Khalid Hasan',
+    memberUsername: 'khalid_tech',
+    memberAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    date: '2026-08-28',
+    deadlineTime: '12:00 AM',
+    hoursLate: 4,
+    lateDurationFormatted: '৪ ঘণ্টা ২০ মিনিট',
+    requiredAds: 4,
+    adsWatched: 0,
+    status: 'temp_removed',
+    adminNotes: 'রাত ১২:০০ টায় সাপোর্ট পেন্ডিং থাকায় অটোমেটিক টেম্পোরারি রিমুভ করা হয়েছে। রিকভারি উইন্ডো চলমান।',
+    createdAt: '2026-08-28 12:00 AM',
+    createdAtTimestamp: new Date('2026-08-28T00:00:00+06:00').getTime()
+  }
+];
+
+export const INITIAL_POINTS_HISTORY: PointsHistoryRecord[] = [
+  {
+    id: 'pts_hist_1',
+    date: '2026-08-27',
+    memberId: 'user_tanzim',
+    memberName: 'Tanzimul Islam',
+    memberUsername: 'tanzim_islam',
+    supportPoints: 42,
+    submissionPoints: 5,
+    allDonePoints: 3,
+    fastestBonusPoints: 10,
+    streakBonusPoints: 2,
+    totalPointsToday: 62,
+    createdAt: '2026-08-27 23:59:59'
+  },
+  {
+    id: 'pts_hist_2',
+    date: '2026-08-27',
+    memberId: 'user_rakib',
+    memberName: 'Rakibul Hasan',
+    memberUsername: 'rakib_hasan',
+    supportPoints: 40,
+    submissionPoints: 5,
+    allDonePoints: 3,
+    fastestBonusPoints: 8,
+    streakBonusPoints: 2,
+    totalPointsToday: 58,
+    createdAt: '2026-08-27 23:59:59'
+  },
+  {
+    id: 'pts_hist_3',
+    date: '2026-08-27',
+    memberId: 'user_sakib',
+    memberName: 'Sakib All Hasan',
+    memberUsername: 'sakib_al_hasan',
+    supportPoints: 38,
+    submissionPoints: 5,
+    allDonePoints: 3,
+    fastestBonusPoints: 6,
+    streakBonusPoints: 2,
+    totalPointsToday: 54,
+    createdAt: '2026-08-27 23:59:59'
+  }
+];
+
+export const INITIAL_AD_DAILY_ROLLUPS: AdDailyRollup[] = [
+  {
+    id: 'ad_roll_1',
+    adId: 'sp_1',
+    adTitle: 'Hosting Provider Direct Sponsor',
+    date: '2026-08-27',
+    totalImpressions: 1420,
+    totalClicks: 184,
+    createdAt: '2026-08-27 23:59:59',
+    updatedAt: '2026-08-27 23:59:59'
+  },
+  {
+    id: 'ad_roll_2',
+    adId: 'sp_2',
+    adTitle: 'E-commerce Brand Promo',
+    date: '2026-08-27',
+    totalImpressions: 980,
+    totalClicks: 95,
+    createdAt: '2026-08-27 23:59:59',
+    updatedAt: '2026-08-27 23:59:59'
+  }
+];
+
+export const INITIAL_DATA_CLEANUP_LOGS: DataCleanupLog[] = [
+  {
+    id: 'clean_1',
+    executedAt: '2026-08-25 04:00 AM',
+    executedBy: 'auto_scheduler',
+    retentionDays: 7,
+    supportRecordsPurged: 38450,
+    notificationsPurged: 120,
+    adEventsRolledUp: 4,
+    scheduledStagingPurged: 18,
+    status: 'success',
+    notes: 'সফলভাবে ৭ দিনের পুরোনো কাঁচা সাপোর্ট রেকর্ড পার্জ করা হয়েছে। মেম্বারদের মোট সাপোর্ট কাউন্ট এবং পয়েন্ট অপরিবর্তিত রাখা হয়েছে।'
+  }
+];
+
+export const INITIAL_REWARD_REDEMPTIONS: RewardRedemption[] = [
+  {
+    id: 'red_1',
+    memberId: 'user_tanzim',
+    memberName: 'Tanzimul Islam',
+    memberUsername: 'tanzim_islam',
+    rewardType: 'vip_badge',
+    title: 'VIP Gold Member Badge',
+    pointsUsed: 50,
+    createdAt: '2026-08-26 18:30:00',
+    status: 'completed'
+  }
+];
+
+export const INITIAL_LATE_SUPPORT_REPORTS: LateSupportReport[] = [
+  {
+    id: 'lsr_1',
+    memberId: 'user_tanvir',
+    memberName: 'Tanvir Hossain',
+    memberUsername: 'tanvir_hossain',
+    memberAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+    reportDate: '2026-08-28',
+    submittedAt: '11:22 PM',
+    submittedAtTimestamp: Date.now() - (3 * 60 * 60 * 1000), // 3 hours ago, still in grace window!
+    reason: 'বিদ্যুৎ বিভ্রাট ও নেটওয়ার্ক ডাউন',
+    details: 'এলাকায় বিকাল থেকে ট্রান্সফরমার নষ্ট হয়ে লোডশেডিং ছিল। রাত ১১টায় কারেন্ট এসেছে, আমি দ্রুত বাকি সাপোর্ট সম্পন্ন করছি।',
+    status: 'pending',
+    recoveryDeadline: 'আগামীকাল ১১:২২ PM',
+    recoveryDeadlineTimestamp: Date.now() + (21 * 60 * 60 * 1000),
+    createdAt: '2026-08-28 11:22 PM',
+    updatedAt: '2026-08-28 11:22 PM'
+  },
+  {
+    id: 'lsr_2',
+    memberId: 'user_rashed',
+    memberName: 'Rashedul Islam',
+    memberUsername: 'rashed_cr7',
+    memberAvatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150&auto=format&fit=crop&q=80',
+    reportDate: '2026-08-27',
+    submittedAt: '10:45 PM',
+    submittedAtTimestamp: Date.now() - (28 * 60 * 60 * 1000),
+    reason: 'জরুরি পারিবারিক কাজ / হাসপাতাল',
+    details: 'জরুরি প্রয়োজনে হাসপাতালে থাকতে হয়েছিল। সকাল ৮টায় এসে সব অল ডান সম্পন্ন করেছি।',
+    status: 'completed_in_grace',
+    recoveryDeadline: '2026-08-28 10:45 PM',
+    recoveryDeadlineTimestamp: Date.now() - (4 * 60 * 60 * 1000),
+    allDoneCompletedAt: '08:35 AM',
+    allDoneCompletedTimestamp: Date.now() - (18 * 60 * 60 * 1000),
+    createdAt: '2026-08-27 10:45 PM',
+    updatedAt: '2026-08-28 08:35 AM'
+  },
+  {
+    id: 'lsr_3',
+    memberId: 'user_jahid',
+    memberName: 'Jahid Hasan',
+    memberUsername: 'jahid_hasan99',
+    memberAvatar: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=150&auto=format&fit=crop&q=80',
+    reportDate: '2026-08-26',
+    submittedAt: '09:15 PM',
+    submittedAtTimestamp: Date.now() - (36 * 60 * 60 * 1000), // >24 hours ago!
+    reason: 'মোবাইল ডিভাইস ও ডিসপ্লে সমস্যা',
+    details: 'আমার মোবাইলের ডিসপ্লে নষ্ট হয়ে যাওয়ায় সময়মতো অল ডান করতে পারিনি। এখন সার্ভিসিং করিয়ে সচল করেছি। অনুগ্রহ করে অ্যাকাউন্ট সচল করে দিন।',
+    status: 'recovery_expired',
+    recoveryDeadline: '2026-08-27 09:15 PM',
+    recoveryDeadlineTimestamp: Date.now() - (12 * 60 * 60 * 1000),
+    createdAt: '2026-08-26 09:15 PM',
+    updatedAt: '2026-08-27 09:15 PM'
+  },
+  {
+    id: 'lsr_4',
+    memberId: 'user_nusrat',
+    memberName: 'Nusrat Jahan',
+    memberUsername: 'nusrat_jahan',
+    memberAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+    reportDate: '2026-08-25',
+    submittedAt: '11:40 PM',
+    submittedAtTimestamp: Date.now() - (60 * 60 * 60 * 1000),
+    reason: 'অফিস প্রজেক্ট ডেডলাইন ও কাজের চাপ',
+    details: 'অফিসের বিশেষ মিটিং ও ডেডলাইন থাকায় রাতে সাপোর্ট শেষ করতে পারিনি। ২৪ ঘণ্টার মধ্যে অ্যাডমিনকে অবহিত করেছি।',
+    status: 'admin_approved',
+    recoveryDeadline: '2026-08-26 11:40 PM',
+    recoveryDeadlineTimestamp: Date.now() - (36 * 60 * 60 * 1000),
+    adminActionBy: 'Emon Ahmed (Super Admin)',
+    adminActionById: 'user_emon',
+    adminActionAt: '2026-08-26 02:30 PM',
+    adminNotes: 'সদস্যের পূর্ববর্তী ভালো ট্র্যাক রেকর্ড ও জেনুইন সমস্যা বিবেচনায় অনুমোদন ও লিংক সাবমিশন সক্রিয় করা হলো।',
+    createdAt: '2026-08-25 11:40 PM',
+    updatedAt: '2026-08-26 02:30 PM'
+  }
+];
+
+

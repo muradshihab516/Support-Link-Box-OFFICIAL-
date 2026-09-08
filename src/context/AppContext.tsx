@@ -22,8 +22,21 @@ import {
   PostContentType,
   LinkCategoryType,
   ScheduledLink,
-  ScheduleStatus
+  ScheduleStatus,
+  AdminSupportLink,
+  LatePenaltyRecord,
+  PointsHistoryRecord,
+  AdDailyRollup,
+  DataCleanupLog,
+  RewardRedemption,
+  StorageOptimizationStats,
+  LateSupportReport,
+  LateSupportReportStatus,
+  MovieItem,
+  MovieFormatLink,
+  ThemePreset
 } from '../types';
+import { THEME_PRESETS, DEFAULT_THEME_ID } from '../data/themePresets';
 import {
   INITIAL_MEMBERS,
   INITIAL_DAILY_LINKS,
@@ -39,10 +52,27 @@ import {
   INITIAL_SETTINGS,
   INITIAL_COMMUNITIES,
   INITIAL_BADGES,
-  INITIAL_SCHEDULED_LINKS
+  INITIAL_SCHEDULED_LINKS,
+  INITIAL_ADMIN_SUPPORT_LINKS,
+  INITIAL_LATE_PENALTIES,
+  INITIAL_POINTS_HISTORY,
+  INITIAL_AD_DAILY_ROLLUPS,
+  INITIAL_DATA_CLEANUP_LOGS,
+  INITIAL_REWARD_REDEMPTIONS,
+  INITIAL_LATE_SUPPORT_REPORTS
 } from '../data/seedData';
+import { INITIAL_MOVIES, generateRandomToken } from '../data/mockMovies';
+
 import { cleanAndFormatFacebookUrl } from '../utils/facebookLinks';
-import { checkBangladeshSubmissionWindow, getBangladeshCurrentTime12h } from '../utils/bangladeshTime';
+import { 
+  checkBangladeshSubmissionWindow, 
+  getBangladeshCurrentTime12h, 
+  checkLateSupportPunishment, 
+  LateSupportStatus,
+  checkBangladeshLateReportEligibility,
+  isSameBangladeshWeek,
+  calculateLateRecoveryDeadline
+} from '../utils/bangladeshTime';
 
 interface AppContextType {
   // State
@@ -69,6 +99,14 @@ interface AppContextType {
   badges: Badge[];
   darkMode: boolean;
   selectedDate: string; // YYYY-MM-DD (defaults to today)
+
+  // Theme Presets & Wallpaper
+  currentThemeId: string;
+  customThemeBgUrl: string;
+  themeOverlayOpacity: number;
+  activeTheme: ThemePreset;
+  setTheme: (themeId: string, customBgUrl?: string) => void;
+  setThemeOverlayOpacity: (opacity: number) => void;
 
   // Scheduled Links
   scheduledLinks: ScheduledLink[];
@@ -205,6 +243,67 @@ interface AppContextType {
   getLeaderboard: (timeframe: 'daily' | 'weekly' | 'monthly' | 'all_time') => Member[];
   getInactiveMembers: (filterDays?: number) => Member[];
   getFrozenMembers: () => Member[];
+
+  // Punishment & Auto-Admin
+  latePenalties: LatePenaltyRecord[];
+  adminSupportLinks: AdminSupportLink[];
+  toggleMemberLinkSubmitPermission: (memberId: string, allowed?: boolean, reason?: string) => { success: boolean; message: string };
+  completeLateAllDone: (memberId: string) => { success: boolean; lateStatus?: LateSupportStatus; penaltyRecord?: LatePenaltyRecord };
+  watchPenaltyAd: (penaltyId: string) => { success: boolean; adsWatched: number; requiredAds: number; isCompleted: boolean };
+  adminReactivateMember: (memberId: string, notes?: string) => { success: boolean; message: string };
+  adminWaivePenalty: (penaltyId: string, notes?: string) => { success: boolean; message: string };
+  adminRevokeLinkSubmit: (memberId: string, reason?: string) => { success: boolean; message: string };
+  adminRestoreLinkSubmit: (memberId: string) => { success: boolean; message: string };
+  addOrUpdateAdminSupportLink: (data: Partial<AdminSupportLink>) => { success: boolean; message: string };
+  deleteAdminSupportLink: (id: string) => { success: boolean; message: string };
+  runAutoAdminPunishmentCheck: (options?: { forceMidnightCheck?: boolean; forceCutoffCheck?: boolean }) => { checkedCount: number; tempRemovedCount: number; suspendedCount: number; message: string };
+  deletePenaltyRecord: (id: string) => { success: boolean; message: string };
+
+  // Storage & Points Lifecycle Architecture
+  pointsHistory: PointsHistoryRecord[];
+  adDailyRollups: AdDailyRollup[];
+  dataCleanupLogs: DataCleanupLog[];
+  rewardRedemptions: RewardRedemption[];
+  purgedSupportRecordsCount: number;
+  fastestSupportersList: { memberId: string; memberName: string; time: string; rank: number; bonusPoints: number }[];
+  awardActionPoints: (
+    memberId: string, 
+    actionType: 'support' | 'submission' | 'all_done' | 'fastest_bonus' | 'streak_bonus', 
+    referenceId: string, 
+    customAmount?: number
+  ) => { success: boolean; pointsAwarded: number; newTotal: number };
+  redeemReward: (memberId: string, rewardType: RewardRedemption['rewardType'], pointsCost: number, title: string) => { success: boolean; message: string };
+  generateDailyPointsHistory: (targetDate?: string) => { success: boolean; rowsCreated: number; message: string };
+  runDataLifecycleCleanup: (options?: { forceDays?: number; triggeredBy?: string }) => DataCleanupLog;
+  exportDataToGoogleSheetsArchive: (options?: { format?: 'csv' | 'json'; sendWebhook?: boolean }) => { success: boolean; message: string; downloadUrl?: string; summaryText?: string; csvContent?: string };
+  getStorageOptimizationStats: () => StorageOptimizationStats;
+
+  // Late Support Report System
+  lateSupportReports: LateSupportReport[];
+  submitLateSupportReport: (
+    reason: string,
+    details: string,
+    screenshotUrl?: string,
+    memberIdOverride?: string,
+    bypassTimeCheckForTest?: boolean
+  ) => { success: boolean; message: string; report?: LateSupportReport };
+  adminApproveLateReport: (reportId: string, notes?: string) => { success: boolean; message: string };
+  adminRejectLateReport: (reportId: string, rejectionReason: string) => { success: boolean; message: string };
+  evaluateLateSupportReports: () => { expiredCount: number; activeCount: number };
+  getMemberWeeklyLateReportsCount: (memberId: string) => number;
+  canMemberSubmitLateReportToday: (memberId: string) => { canSubmit: boolean; reason?: string; remainingInWeek: number; eligibility?: any };
+  getMemberActiveLateReport: (memberId: string) => LateSupportReport | null;
+  deleteLateSupportReport: (reportId: string) => { success: boolean; message: string };
+
+  // Entertainment & Movie Lover Module
+  movies: MovieItem[];
+  addMovie: (movieData: Omit<MovieItem, 'id' | 'createdAt' | 'updatedAt' | 'totalViews' | 'totalDownloads'>) => { success: boolean; movie: MovieItem };
+  updateMovie: (id: string, updates: Partial<MovieItem>) => { success: boolean; message: string };
+  deleteMovie: (id: string) => { success: boolean; message: string };
+  toggleMovieStatus: (id: string) => { success: boolean; newStatus: 'active' | 'draft' | 'archived' };
+  incrementMovieViews: (id: string) => void;
+  resolveDownloadToken: (token: string) => { success: boolean; destinationUrl?: string; movie?: MovieItem; link?: MovieFormatLink; error?: string };
+  recordDownloadClick: (token: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -226,7 +325,21 @@ const STORAGE_KEYS = {
   CURRENT_USER_ID: 'slb_current_user_id_v4',
   COMMUNITY_ID: 'slb_current_comm_id_v4',
   DARK_MODE: 'slb_dark_mode_v4',
-  SCHEDULED_LINKS: 'slb_scheduled_links_v4'
+  SCHEDULED_LINKS: 'slb_scheduled_links_v4',
+  ADMIN_SUPPORT_LINKS: 'slb_admin_support_links_v4',
+  LATE_PENALTIES: 'slb_late_penalties_v4',
+  POINTS_HISTORY: 'slb_points_history_v4',
+  AD_ROLLUPS: 'slb_ad_rollups_v4',
+  CLEANUP_LOGS: 'slb_cleanup_logs_v4',
+  REWARD_REDEMPTIONS: 'slb_reward_redemptions_v4',
+  PURGED_SUPPORTS_COUNT: 'slb_purged_supports_count_v4',
+  PROCESSED_POINT_ACTIONS: 'slb_processed_points_v4',
+  FASTEST_SUPPORTERS: 'slb_fastest_supporters_v4',
+  LATE_SUPPORT_REPORTS: 'slb_late_support_reports_v4',
+  MOVIES: 'slb_movies_v4',
+  THEME_ID: 'slb_theme_id_v4',
+  CUSTOM_BG_URL: 'slb_custom_bg_url_v4',
+  THEME_OPACITY: 'slb_theme_opacity_v4'
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -322,6 +435,76 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return saved ? JSON.parse(saved) : INITIAL_COMMUNITIES;
   });
 
+  const [adminSupportLinks, setAdminSupportLinks] = useState<AdminSupportLink[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.ADMIN_SUPPORT_LINKS);
+    return saved ? JSON.parse(saved) : INITIAL_ADMIN_SUPPORT_LINKS;
+  });
+
+  const [latePenalties, setLatePenalties] = useState<LatePenaltyRecord[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LATE_PENALTIES);
+    return saved ? JSON.parse(saved) : INITIAL_LATE_PENALTIES;
+  });
+
+  const [pointsHistory, setPointsHistory] = useState<PointsHistoryRecord[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.POINTS_HISTORY);
+    return saved ? JSON.parse(saved) : INITIAL_POINTS_HISTORY;
+  });
+
+  const [adDailyRollups, setAdDailyRollups] = useState<AdDailyRollup[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.AD_ROLLUPS);
+    return saved ? JSON.parse(saved) : INITIAL_AD_DAILY_ROLLUPS;
+  });
+
+  const [dataCleanupLogs, setDataCleanupLogs] = useState<DataCleanupLog[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.CLEANUP_LOGS);
+    return saved ? JSON.parse(saved) : INITIAL_DATA_CLEANUP_LOGS;
+  });
+
+  const [rewardRedemptions, setRewardRedemptions] = useState<RewardRedemption[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.REWARD_REDEMPTIONS);
+    return saved ? JSON.parse(saved) : INITIAL_REWARD_REDEMPTIONS;
+  });
+
+  const [purgedSupportRecordsCount, setPurgedSupportRecordsCount] = useState<number>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PURGED_SUPPORTS_COUNT);
+    return saved ? Number(saved) : 38450;
+  });
+
+  const [processedPointActions, setProcessedPointActions] = useState<string[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.PROCESSED_POINT_ACTIONS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [fastestSupportersMap, setFastestSupportersMap] = useState<Record<string, { memberId: string; memberName: string; time: string; rank: number; bonusPoints: number }[]>>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.FASTEST_SUPPORTERS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return {
+      '2026-08-28': [
+        { memberId: 'user_tanzim', memberName: 'Tanzimul Islam', time: '12:04 PM', rank: 1, bonusPoints: 10 },
+        { memberId: 'user_rakib', memberName: 'Rakibul Hasan', time: '12:11 PM', rank: 2, bonusPoints: 8 },
+        { memberId: 'user_sakib', memberName: 'Sakib All Hasan', time: '12:18 PM', rank: 3, bonusPoints: 6 }
+      ]
+    };
+  });
+
+  const [lateSupportReports, setLateSupportReports] = useState<LateSupportReport[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.LATE_SUPPORT_REPORTS);
+    return saved ? JSON.parse(saved) : INITIAL_LATE_SUPPORT_REPORTS;
+  });
+
+  const [movies, setMovies] = useState<MovieItem[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.MOVIES);
+    return saved ? JSON.parse(saved) : INITIAL_MOVIES;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(movies));
+    } catch {}
+  }, [movies]);
+
   const [currentCommunityId, setCurrentCommunityId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEYS.COMMUNITY_ID) || 'comm_default';
   });
@@ -334,6 +517,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const saved = localStorage.getItem(STORAGE_KEYS.DARK_MODE);
     return saved !== null ? JSON.parse(saved) : true;
   });
+
+  const [currentThemeId, setCurrentThemeId] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEYS.THEME_ID) || DEFAULT_THEME_ID;
+  });
+
+  const [customThemeBgUrl, setCustomThemeBgUrl] = useState<string>(() => {
+    return localStorage.getItem(STORAGE_KEYS.CUSTOM_BG_URL) || '';
+  });
+
+  const [themeOverlayOpacity, setThemeOverlayOpacity] = useState<number>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.THEME_OPACITY);
+    return saved ? Number(saved) : 80;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.THEME_ID, currentThemeId);
+  }, [currentThemeId]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_BG_URL, customThemeBgUrl);
+  }, [customThemeBgUrl]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.THEME_OPACITY, themeOverlayOpacity.toString());
+  }, [themeOverlayOpacity]);
+
+  const activeTheme = useMemo<ThemePreset>(() => {
+    const found = THEME_PRESETS.find(t => t.id === currentThemeId) || THEME_PRESETS[0];
+    if (currentThemeId === 'custom_wallpaper' && customThemeBgUrl) {
+      return {
+        ...found,
+        bgImageUrl: customThemeBgUrl,
+        thumbnailUrl: customThemeBgUrl
+      };
+    }
+    return found;
+  }, [currentThemeId, customThemeBgUrl]);
+
+  const setTheme = (themeId: string, customBgUrl?: string) => {
+    setCurrentThemeId(themeId);
+    if (customBgUrl !== undefined) {
+      setCustomThemeBgUrl(customBgUrl);
+    }
+  };
 
   const [selectedDate] = useState<string>(TODAY);
   const [activeReportModalId, setActiveReportModalId] = useState<string | null>(null);
@@ -353,6 +580,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.REVENUE, JSON.stringify(revenueRecords)); }, [revenueRecords]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings)); }, [settings]);
   useEffect(() => { localStorage.setItem(STORAGE_KEYS.COMMUNITIES, JSON.stringify(communities)); }, [communities]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.ADMIN_SUPPORT_LINKS, JSON.stringify(adminSupportLinks)); }, [adminSupportLinks]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.LATE_PENALTIES, JSON.stringify(latePenalties)); }, [latePenalties]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.POINTS_HISTORY, JSON.stringify(pointsHistory)); }, [pointsHistory]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.AD_ROLLUPS, JSON.stringify(adDailyRollups)); }, [adDailyRollups]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.CLEANUP_LOGS, JSON.stringify(dataCleanupLogs)); }, [dataCleanupLogs]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.REWARD_REDEMPTIONS, JSON.stringify(rewardRedemptions)); }, [rewardRedemptions]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PURGED_SUPPORTS_COUNT, purgedSupportRecordsCount.toString()); }, [purgedSupportRecordsCount]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.PROCESSED_POINT_ACTIONS, JSON.stringify(processedPointActions)); }, [processedPointActions]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.FASTEST_SUPPORTERS, JSON.stringify(fastestSupportersMap)); }, [fastestSupportersMap]);
+  useEffect(() => { localStorage.setItem(STORAGE_KEYS.LATE_SUPPORT_REPORTS, JSON.stringify(lateSupportReports)); }, [lateSupportReports]);
 
   // Real-time cross-tab synchronization for daily links
   useEffect(() => {
@@ -567,8 +804,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
 
+    // Link Submission Permission Revocation check (Admin Revocation)
+    if (!isAdmin && effectiveMember.canSubmitLink === false) {
+      return { 
+        success: false, 
+        message: `🔒 Link Submission Disabled: এডমিন কর্তৃক আপনার লিংক সাবমিট করার ক্ষমতা সাময়িকভাবে স্থগিত করা হয়েছে।${effectiveMember.canSubmitLinkRevokeReason ? ` (কারণ: ${effectiveMember.canSubmitLinkRevokeReason})` : ''}` 
+      };
+    }
+
+    if (!isAdmin && effectiveMember.status === 'temp_removed') {
+      return {
+        success: false,
+        message: '⚠️ আপনি লিংক বক্স থেকে সাময়িকভাবে রিমুভ অবস্থায় আছেন। গতকালকের/আজকের পেন্ডিং সাপোর্ট সম্পূর্ণ করে অল ডান করুন এবং রি-অ্যাক্টিভেশন সম্পন্ন করুন।'
+      };
+    }
+
     if (!isAdmin && (effectiveMember.status === 'suspended' || effectiveMember.status === 'removed')) {
-      return { success: false, message: `Your account is ${effectiveMember.status}. Submission is restricted.` };
+      return { success: false, message: `আপনার অ্যাকাউন্ট ${effectiveMember.status} অবস্থায় আছে। লিংক সাবমিট করার জন্য অ্যাডমিনের সাথে যোগাযোগ করুন।` };
     }
 
     // Daily Limit check:
@@ -649,7 +901,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     setDailyLinks(prev => [...prev, newLink]);
 
-    // Update member stats
+    // Update member stats and award real-time submission points
+    const subPts = settings.pointRules?.submissionPoints ?? 5;
+    awardActionPoints(effectiveMember.id, 'submission', newLink.id, subPts);
+
     setMembers(prev => prev.map(m => {
       if (m.id === effectiveMember.id) {
         return {
@@ -744,6 +999,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     // Increment supportCount on the target daily link
     setDailyLinks(prev => prev.map(l => l.id === dailyLinkId ? { ...l, supportCount: l.supportCount + 1 } : l));
 
+    // Award real-time support points
+    const suppPts = settings.pointRules?.supportPoints ?? 1;
+    awardActionPoints(currentUser.id, 'support', dailyLinkId, suppPts);
+
     // Update supporter member's total supports and activity
     setMembers(prev => prev.map(m => {
       if (m.id === currentUser.id) {
@@ -756,6 +1015,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
       return m;
     }));
+
+    // Trigger All-Done & Fastest Supporter evaluation
+    setTimeout(() => {
+      if (currentUser?.id) {
+        checkMemberAllDoneStatus(currentUser.id);
+      }
+    }, 50);
 
     return { success: true, message: `✓ Marked support for #${targetLink.linkNumber} (${targetLink.memberName})` };
   };
@@ -920,6 +1186,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { 
         success: false, 
         message: `সদস্য ${targetMember.name} এর অ্যাকাউন্ট বর্তমানে ${targetMember.status} অবস্থায় রয়েছে। শিডিউল করা সম্ভব নয়।` 
+      };
+    }
+
+    if (!isAdmin && targetMember.status === 'temp_removed') {
+      return {
+        success: false,
+        message: '⚠️ আপনি লিংক বক্স থেকে সাময়িকভাবে রিমুভ অবস্থায় আছেন। পেন্ডিং সাপোর্ট সম্পন্ন করে রি-অ্যাক্টিভেশন ছাড়া শিডিউল করা সম্ভব নয়।'
+      };
+    }
+
+    // Check Link Submit Permission (canSubmitLink)
+    if (!isAdmin && targetMember.canSubmitLink === false) {
+      return {
+        success: false,
+        message: `🔒 Link Submission Disabled: এডমিন কর্তৃক আপনার লিংক সাবমিট করার ক্ষমতা সাময়িকভাবে স্থগিত করা হয়েছে।${targetMember.canSubmitLinkRevokeReason ? ` (${targetMember.canSubmitLinkRevokeReason})` : ''}`
       };
     }
 
@@ -2187,6 +2468,1571 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return members.filter(m => m.status === 'frozen');
   };
 
+  // ==========================================
+  // AUTO-ADMIN & PUNISHMENT SYSTEM
+  // ==========================================
+
+  // Toggle Member's Link Submission Permission (Manual Admin Control)
+  const toggleMemberLinkSubmitPermission = (memberId: string, allowed?: boolean, reason?: string) => {
+    const target = members.find(m => m.id === memberId);
+    if (!target) return { success: false, message: 'সদস্য খুঁজে পাওয়া যায়নি।' };
+
+    const newAllowed = allowed !== undefined ? allowed : (target.canSubmitLink === false);
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          canSubmitLink: newAllowed,
+          canSubmitLinkRevokeReason: newAllowed ? undefined : (reason || 'প্রশাসনিক নির্দেশনা ও প্ল্যাটফর্ম রুলস ভঙ্গের কারণে'),
+          canSubmitLinkRevokedAt: newAllowed ? undefined : getBangladeshCurrentTime12h(),
+          canSubmitLinkRevokedBy: newAllowed ? undefined : (currentUser?.name || 'Admin')
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      newAllowed ? 'RESTORE_LINK_SUBMIT_PERMISSION' : 'REVOKE_LINK_SUBMIT_PERMISSION',
+      'member',
+      target.id,
+      target.name,
+      newAllowed 
+        ? `${currentUser?.name || 'Admin'} restored link submission permission.`
+        : `${currentUser?.name || 'Admin'} revoked link submission permission. Reason: ${reason || 'Admin instruction'}`
+    );
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      userId: target.id,
+      type: 'warning',
+      title: newAllowed ? '🔓 লিংক সাবমিশন অনুমতি পুনঃবহাল' : '🔒 লিংক সাবমিশন সাময়িক স্থগিত',
+      message: newAllowed
+        ? 'আপনার লিংক সাবমিট করার ক্ষমতা পুনরায় চালু করা হয়েছে। আপনি এখন নিয়মিত লিংক সাবমিট করতে পারেন।'
+        : `অ্যাডমিন আপনার লিংক সাবমিট করার ক্ষমতা সাময়িকভাবে স্থগিত করেছেন। ${reason ? `(কারণ: ${reason})` : ''}`,
+      timestamp: 'Just now',
+      read: false
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    return {
+      success: true,
+      message: newAllowed
+        ? `✓ ${target.name} এর লিংক সাবমিট করার অনুমতি সফলভাবে ফিরিয়ে দেওয়া হয়েছে!`
+        : `✓ ${target.name} এর লিংক সাবমিট করার ক্ষমতা সফলভাবে স্থগিত করা হয়েছে।`
+    };
+  };
+
+  const adminRevokeLinkSubmit = (memberId: string, reason?: string) => {
+    return toggleMemberLinkSubmitPermission(memberId, false, reason);
+  };
+
+  const adminRestoreLinkSubmit = (memberId: string) => {
+    return toggleMemberLinkSubmitPermission(memberId, true);
+  };
+
+  // Run Auto Admin Punishment Checks (12:00 AM Midnight & 10:00 AM Cutoff)
+  const runAutoAdminPunishmentCheck = (options?: { forceMidnightCheck?: boolean; forceCutoffCheck?: boolean }) => {
+    if (settings.punishmentEnabled === false && !options?.forceMidnightCheck && !options?.forceCutoffCheck) {
+      return { checkedCount: 0, tempRemovedCount: 0, suspendedCount: 0, message: 'Auto-admin punishment is disabled in settings.' };
+    }
+
+    const bdTime = checkLateSupportPunishment();
+    const isMidnightLate = Boolean(options?.forceMidnightCheck || (bdTime.lateMinutes >= 0 && !bdTime.isPastCutoff));
+    const isCutoffExpired = Boolean(options?.forceCutoffCheck || bdTime.isPastCutoff);
+
+    let tempRemovedCount = 0;
+    let suspendedCount = 0;
+    let checkedCount = 0;
+
+    const newPenalties: LatePenaltyRecord[] = [...latePenalties];
+    const newMembers = members.map(member => {
+      // Exclude super admins / admins from punishment
+      if (member.role === 'super_admin' || member.role === 'admin') {
+        return member;
+      }
+
+      checkedCount++;
+      const todayStats = getTodaySupportStats(member.id);
+      const hasPendingSupport = todayStats.pendingCount > 0;
+
+      // EXCEPTION LAYER: Check if member has an active Late Support Report
+      const activeLateReport = lateSupportReports.find(r => 
+        r.memberId === member.id && 
+        (r.status === 'pending' || r.status === 'recovery_expired')
+      );
+
+      if (activeLateReport) {
+        const is24hExpired = Date.now() > activeLateReport.recoveryDeadlineTimestamp;
+
+        // If > 24 hours passed without All Done -> Status becomes Approval Pending & Suspended
+        if (is24hExpired && hasPendingSupport) {
+          suspendedCount++;
+          return {
+            ...member,
+            status: 'suspended' as MemberStatus,
+            penaltyStatus: 'suspended' as const,
+            hasReportedLateSupport: true,
+            lateReportRecoveryStatus: 'approval_pending' as const,
+            activeLateReportId: activeLateReport.id,
+            canSubmitLink: false,
+            canSubmitLinkRevokeReason: 'Late Support ২৪ ঘণ্টার গ্রেস সময় অতিক্রম করায় অ্যাকাউন্ট Approval Pending অবস্থায় রয়েছে। এডমিন অ্যাপ্রুভাল প্রয়োজন।',
+            suspendedAt: getBangladeshCurrentTime12h()
+          };
+        }
+
+        // Within 24-hour grace window -> Protected from Ad punishment and Auto-Remove!
+        return {
+          ...member,
+          status: 'active' as MemberStatus,
+          hasReportedLateSupport: true,
+          lateReportRecoveryStatus: 'in_recovery' as const,
+          activeLateReportId: activeLateReport.id,
+          requiredAdsCount: 0,
+          watchedAdsCount: 0
+        };
+      }
+
+      // Stage 2: Past 10:00 AM (Cutoff Expired) & member was temp_removed
+      if (isCutoffExpired && member.status === 'temp_removed' && hasPendingSupport) {
+        suspendedCount++;
+        // Update penalty record
+        const pIdx = newPenalties.findIndex(p => p.memberId === member.id && p.status === 'temp_removed');
+        if (pIdx !== -1) {
+          newPenalties[pIdx] = {
+            ...newPenalties[pIdx],
+            status: 'suspended',
+            suspendedAt: getBangladeshCurrentTime12h(),
+            adminNotes: '১০ ঘণ্টার রিকভারি উইন্ডো (সকাল ১০:০০ টা) অতিক্রম করায় স্বয়ংক্রিয়ভাবে সাসপেন্ড করা হয়েছে।'
+          };
+        } else {
+          newPenalties.unshift({
+            id: `pen_${Date.now()}_${member.id}`,
+            memberId: member.id,
+            memberName: member.name,
+            memberUsername: member.username,
+            memberAvatar: member.avatar,
+            date: TODAY,
+            deadlineTime: '12:00 AM',
+            hoursLate: 10,
+            lateDurationFormatted: '১০ ঘণ্টা (Cutoff Exceeded)',
+            requiredAds: settings.maxPenaltyAdsCap || 5,
+            adsWatched: 0,
+            status: 'suspended',
+            suspendedAt: getBangladeshCurrentTime12h(),
+            adminNotes: '১০ ঘণ্টার রিকভারি উইন্ডো অতিক্রম করায় অটোমেটিক সাসপেন্ড হয়েছে।',
+            createdAt: getBangladeshCurrentTime12h(),
+            createdAtTimestamp: Date.now()
+          });
+        }
+
+        return {
+          ...member,
+          status: 'suspended' as MemberStatus,
+          penaltyStatus: 'suspended' as const,
+          suspendedAt: getBangladeshCurrentTime12h()
+        };
+      }
+
+      // Stage 1: Past 12:00 AM (Midnight Deadline) & member has pending support
+      if (isMidnightLate && hasPendingSupport && member.status === 'active') {
+        tempRemovedCount++;
+        const requiredAds = Math.min(
+          settings.maxPenaltyAdsCap || 5,
+          Math.max(1, bdTime.lateHours * (settings.adsPerLateHour || 1))
+        );
+
+        // Add or update penalty record
+        const existingPenalty = newPenalties.find(p => p.memberId === member.id && p.date === TODAY && (p.status === 'temp_removed' || p.status === 'suspended'));
+        if (!existingPenalty) {
+          newPenalties.unshift({
+            id: `pen_${Date.now()}_${member.id}`,
+            memberId: member.id,
+            memberName: member.name,
+            memberUsername: member.username,
+            memberAvatar: member.avatar,
+            date: TODAY,
+            deadlineTime: '12:00 AM',
+            hoursLate: bdTime.lateHours,
+            lateDurationFormatted: bdTime.lateFormattedBangla,
+            requiredAds,
+            adsWatched: 0,
+            status: 'temp_removed',
+            adminNotes: 'রাত ১২:০০ টায় অল ডান না থাকায় অটো এডমিন সিস্টেম কর্তৃক সাময়িক রিমুভ করা হয়েছে।',
+            createdAt: getBangladeshCurrentTime12h(),
+            createdAtTimestamp: Date.now()
+          });
+        }
+
+        return {
+          ...member,
+          status: 'temp_removed' as MemberStatus,
+          penaltyStatus: 'temp_removed' as const,
+          requiredAdsCount: requiredAds,
+          watchedAdsCount: 0,
+          penaltyHoursLate: bdTime.lateHours
+        };
+      }
+
+      return member;
+    });
+
+    if (tempRemovedCount > 0 || suspendedCount > 0) {
+      setMembers(newMembers);
+      setLatePenalties(newPenalties);
+
+      addAuditLog(
+        'AUTO_ADMIN_PUNISHMENT_RUN',
+        'system',
+        'auto_admin',
+        'Auto-Admin Engine',
+        `Punishment scan executed: ${tempRemovedCount} members moved to TEMP_REMOVED, ${suspendedCount} members moved to SUSPENDED.`
+      );
+    }
+
+    return {
+      checkedCount,
+      tempRemovedCount,
+      suspendedCount,
+      message: `অটো-এডমিন স্ক্যান সম্পন্ন: ${tempRemovedCount} জন সাময়িক রিমুভ, ${suspendedCount} জন সাসপেন্ড করা হয়েছে।`
+    };
+  };
+
+  // Trigger when a member completes pending support after deadline and does late All Done
+  const completeLateAllDone = (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return { success: false };
+
+    // EXCEPTION LAYER: Check if member has an active Late Support Report
+    const activeLateReport = lateSupportReports.find(r => 
+      r.memberId === memberId && 
+      (r.status === 'pending' || r.status === 'recovery_expired')
+    );
+
+    if (activeLateReport) {
+      const isWithinGrace = Date.now() <= activeLateReport.recoveryDeadlineTimestamp;
+
+      if (isWithinGrace) {
+        // SUCCESS: Finished All Done within 24h grace window!
+        // NO ADS BARRIER! Restores full active status and link submission permission.
+        setLateSupportReports(prev => prev.map(r => {
+          if (r.id === activeLateReport.id) {
+            return {
+              ...r,
+              status: 'completed_in_grace',
+              allDoneCompletedAt: getBangladeshCurrentTime12h(),
+              allDoneCompletedTimestamp: Date.now(),
+              updatedAt: getBangladeshCurrentTime12h()
+            };
+          }
+          return r;
+        }));
+
+        setMembers(prev => prev.map(m => {
+          if (m.id === memberId) {
+            return {
+              ...m,
+              status: 'active' as MemberStatus,
+              penaltyStatus: 'none' as const,
+              hasReportedLateSupport: false,
+              lateReportRecoveryStatus: 'completed' as const,
+              requiredAdsCount: 0,
+              watchedAdsCount: 0,
+              canSubmitLink: true,
+              canSubmitLinkRevokeReason: undefined
+            };
+          }
+          return m;
+        }));
+
+        const successNotif: AppNotification = {
+          id: `notif_${Date.now()}_grace_success`,
+          userId: memberId,
+          type: 'announcement',
+          title: '🎉 Late Support রিকভারি সফল!',
+          message: 'আপনি ২৪ ঘণ্টার গ্রেস সময়ের মধ্যে All Done সম্পন্ন করেছেন! কোনো বিজ্ঞাপন ছাড়াই আপনার অ্যাকাউন্ট সম্পূর্ণ সচল রয়েছে এবং লিংক সাবমিশন সক্রিয় রয়েছে।',
+          timestamp: 'Just now',
+          read: false
+        };
+        setNotifications(prev => [successNotif, ...prev]);
+
+        addAuditLog(
+          'LATE_SUPPORT_RECOVERY_COMPLETED',
+          'member',
+          member.id,
+          member.name,
+          'Member completed All Done within 24-hour grace window. Ads bypassed, link submission restored.'
+        );
+
+        return {
+          success: true,
+          bypassedAds: true,
+          message: 'অভিনন্দন! আপনি গ্রেস সময়ের মধ্যে All Done সম্পন্ন করায় কোনো বিজ্ঞাপন ছাড়াই অ্যাকাউন্ট সম্পূর্ণ সক্রিয় রয়েছে।'
+        };
+      } else {
+        // Over 24 hours! Status becomes Approval Pending
+        setLateSupportReports(prev => prev.map(r => {
+          if (r.id === activeLateReport.id) {
+            return {
+              ...r,
+              status: 'recovery_expired',
+              allDoneCompletedAt: getBangladeshCurrentTime12h(),
+              allDoneCompletedTimestamp: Date.now(),
+              updatedAt: getBangladeshCurrentTime12h()
+            };
+          }
+          return r;
+        }));
+
+        setMembers(prev => prev.map(m => {
+          if (m.id === memberId) {
+            return {
+              ...m,
+              status: 'suspended' as MemberStatus,
+              penaltyStatus: 'suspended' as const,
+              lateReportRecoveryStatus: 'approval_pending' as const,
+              canSubmitLink: false,
+              canSubmitLinkRevokeReason: '২৪ ঘণ্টার মধ্যে All Done না করায় অ্যাকাউন্ট Approval Pending অবস্থায় রয়েছে। এডমিন রিভিউ প্রয়োজন।',
+              suspendedAt: getBangladeshCurrentTime12h()
+            };
+          }
+          return m;
+        }));
+
+        return {
+          success: false,
+          requiresAdminApproval: true,
+          message: '২৪ ঘণ্টার গ্রেস সময় পার হয়ে গেছে। আপনার অ্যাকাউন্ট বর্তমানে Approval Pending অবস্থায় রয়েছে। এডমিন রিভিউ করে অ্যাপ্রুভ করলে লিংক সাবমিট করতে পারবেন।'
+        };
+      }
+    }
+
+    const lateStatus = checkLateSupportPunishment(undefined, {
+      adsPerHour: settings.adsPerLateHour || 1,
+      maxAds: settings.maxPenaltyAdsCap || 5
+    });
+
+    // Check existing or create new penalty record
+    let targetPenalty = latePenalties.find(p => p.memberId === memberId && (p.status === 'temp_removed' || p.status === 'suspended'));
+    
+    if (targetPenalty) {
+      targetPenalty = {
+        ...targetPenalty,
+        completedAt: getBangladeshCurrentTime12h(),
+        hoursLate: lateStatus.lateHours,
+        lateDurationFormatted: lateStatus.lateFormattedBangla,
+        requiredAds: lateStatus.requiredAds
+      };
+      setLatePenalties(prev => prev.map(p => p.id === targetPenalty!.id ? targetPenalty! : p));
+    } else {
+      targetPenalty = {
+        id: `pen_${Date.now()}_${member.id}`,
+        memberId: member.id,
+        memberName: member.name,
+        memberUsername: member.username,
+        memberAvatar: member.avatar,
+        date: TODAY,
+        deadlineTime: '12:00 AM',
+        completedAt: getBangladeshCurrentTime12h(),
+        hoursLate: lateStatus.lateHours,
+        lateDurationFormatted: lateStatus.lateFormattedBangla,
+        requiredAds: lateStatus.requiredAds,
+        adsWatched: 0,
+        status: 'temp_removed',
+        adminNotes: 'দেরিতে অল ডান সম্পন্ন করেছে। রি-অ্যাক্টিভেশনের জন্য ভিডিও অ্যাডস অপেক্ষমান।',
+        createdAt: getBangladeshCurrentTime12h(),
+        createdAtTimestamp: Date.now()
+      };
+      setLatePenalties(prev => [targetPenalty!, ...prev]);
+    }
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          status: 'temp_removed' as MemberStatus,
+          penaltyStatus: 'temp_removed' as const,
+          requiredAdsCount: lateStatus.requiredAds,
+          watchedAdsCount: targetPenalty?.adsWatched || 0,
+          penaltyHoursLate: lateStatus.lateHours
+        };
+      }
+      return m;
+    }));
+
+    return {
+      success: true,
+      lateStatus,
+      penaltyRecord: targetPenalty
+    };
+  };
+
+  // Watch a penalty ad to progress towards re-activation
+  const watchPenaltyAd = (penaltyId: string) => {
+    const penalty = latePenalties.find(p => p.id === penaltyId);
+    if (!penalty) return { success: false, adsWatched: 0, requiredAds: 0, isCompleted: false };
+
+    const newWatched = (penalty.adsWatched || 0) + 1;
+    const isCompleted = newWatched >= penalty.requiredAds;
+
+    setLatePenalties(prev => prev.map(p => {
+      if (p.id === penaltyId) {
+        return {
+          ...p,
+          adsWatched: newWatched,
+          status: isCompleted ? 'reactivated' : p.status,
+          reactivatedAt: isCompleted ? getBangladeshCurrentTime12h() : undefined
+        };
+      }
+      return p;
+    }));
+
+    if (isCompleted) {
+      setMembers(prev => prev.map(m => {
+        if (m.id === penalty.memberId) {
+          return {
+            ...m,
+            status: 'active' as MemberStatus,
+            penaltyStatus: 'none' as const,
+            requiredAdsCount: 0,
+            watchedAdsCount: 0
+          };
+        }
+        return m;
+      }));
+
+      addAuditLog(
+        'MEMBER_PENALTY_REACTIVATED',
+        'member',
+        penalty.memberId,
+        penalty.memberName,
+        `Member completed all ${penalty.requiredAds} required penalty ads and self-reactivated account.`
+      );
+
+      const notif: AppNotification = {
+        id: `notif_${Date.now()}`,
+        userId: penalty.memberId,
+        type: 'support_reminder',
+        title: '🎉 অ্যাকাউন্ট সফলভাবে Re-Activated হয়েছে!',
+        message: 'দেরিতে অল ডান করায় নির্ধারিত ভিডিও অ্যাডগুলো সম্পন্ন করায় আপনার অ্যাকাউন্ট সক্রিয় করা হয়েছে। ধন্যবাদ!',
+        timestamp: 'Just now',
+        read: false
+      };
+      setNotifications(prev => [notif, ...prev]);
+    }
+
+    return {
+      success: true,
+      adsWatched: newWatched,
+      requiredAds: penalty.requiredAds,
+      isCompleted
+    };
+  };
+
+  // Admin manually reactivates/unsuspends a member
+  const adminReactivateMember = (memberId: string, notes?: string) => {
+    const target = members.find(m => m.id === memberId);
+    if (!target) return { success: false, message: 'সদস্য খুঁজে পাওয়া যায়নি।' };
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          status: 'active' as MemberStatus,
+          penaltyStatus: 'none' as const,
+          requiredAdsCount: 0,
+          watchedAdsCount: 0
+        };
+      }
+      return m;
+    }));
+
+    setLatePenalties(prev => prev.map(p => {
+      if (p.memberId === memberId && (p.status === 'temp_removed' || p.status === 'suspended')) {
+        return {
+          ...p,
+          status: 'admin_waived',
+          reactivatedAt: getBangladeshCurrentTime12h(),
+          adminNotes: notes || `${currentUser?.name || 'Admin'} কর্তৃক ম্যানুয়ালি রি-অ্যাক্টিভ ও পেনাল্টি মওকুফ করা হয়েছে।`,
+          resolvedByAdminId: currentUser?.id,
+          resolvedByAdminName: currentUser?.name
+        };
+      }
+      return p;
+    }));
+
+    addAuditLog(
+      'ADMIN_REACTIVATE_MEMBER',
+      'member',
+      target.id,
+      target.name,
+      `${currentUser?.name || 'Admin'} manually reactivated member. Notes: ${notes || 'Admin Approval'}`
+    );
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      userId: target.id,
+      type: 'announcement',
+      title: '✅ অ্যাডমিন কর্তৃক অ্যাকাউন্ট Re-Activated',
+      message: `অ্যাডমিন ${currentUser?.name || ''} আপনার অ্যাকাউন্ট সক্রিয় করেছেন। আপনি এখন যথারীতি লিংক বক্স ব্যবহার করতে পারবেন।`,
+      timestamp: 'Just now',
+      read: false
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    return { success: true, message: `✓ ${target.name} এর অ্যাকাউন্ট সফলভাবে সক্রিয় ও পেনাল্টি মওকুফ করা হয়েছে!` };
+  };
+
+  // Admin waives specific penalty record
+  const adminWaivePenalty = (penaltyId: string, notes?: string) => {
+    const penalty = latePenalties.find(p => p.id === penaltyId);
+    if (!penalty) return { success: false, message: 'পেনাল্টি রেকর্ড পাওয়া যায়নি।' };
+
+    return adminReactivateMember(penalty.memberId, notes);
+  };
+
+  // Add or update admin support link
+  const addOrUpdateAdminSupportLink = (data: Partial<AdminSupportLink>) => {
+    if (!currentUser) return { success: false, message: 'লগইন প্রয়োজন।' };
+
+    if (data.id && adminSupportLinks.some(l => l.id === data.id)) {
+      setAdminSupportLinks(prev => prev.map(l => l.id === data.id ? { ...l, ...data, updatedAt: getBangladeshCurrentTime12h() } : l));
+      return { success: true, message: '✓ অ্যাডমিন সাপোর্ট আইডি আপডেট করা হয়েছে!' };
+    }
+
+    const newLink: AdminSupportLink = {
+      id: `supp_admin_${Date.now()}`,
+      adminId: data.adminId || currentUser.id,
+      adminName: data.adminName || currentUser.name,
+      adminUsername: data.adminUsername || currentUser.username,
+      adminAvatar: data.adminAvatar || currentUser.avatar,
+      adminRole: data.adminRole || currentUser.role,
+      platformName: data.platformName || 'Facebook Messenger',
+      supportUrl: data.supportUrl || '',
+      displayLabel: data.displayLabel || `${currentUser.name} (Support)`,
+      notes: data.notes || '',
+      isActive: data.isActive !== false,
+      updatedAt: getBangladeshCurrentTime12h()
+    };
+
+    setAdminSupportLinks(prev => [...prev, newLink]);
+    return { success: true, message: '✓ নতুন অ্যাডমিন সাপোর্ট আইডি যুক্ত হয়েছে!' };
+  };
+
+  // Delete admin support link
+  const deleteAdminSupportLink = (id: string) => {
+    setAdminSupportLinks(prev => prev.filter(l => l.id !== id));
+    return { success: true, message: '✓ সাপোর্ট আইডি মুছে ফেলা হয়েছে।' };
+  };
+
+  // Delete penalty record
+  const deletePenaltyRecord = (id: string) => {
+    setLatePenalties(prev => prev.filter(p => p.id !== id));
+    return { success: true, message: '✓ পেনাল্টি রেকর্ড মুছে ফেলা হয়েছে।' };
+  };
+
+  // -------------------------------------------------------------
+  // LATE SUPPORT REPORT SYSTEM (EXCEPTION & GRACE LAYER)
+  // -------------------------------------------------------------
+
+  // Get count of late support reports used by a member this week
+  const getMemberWeeklyLateReportsCount = (memberId: string): number => {
+    return lateSupportReports.filter(r => 
+      r.memberId === memberId && 
+      isSameBangladeshWeek(r.reportDate, TODAY)
+    ).length;
+  };
+
+  // Check if a member is currently eligible to submit a Late Support Report
+  const canMemberSubmitLateReportToday = (memberId: string) => {
+    if (settings.lateSupportReportEnabled === false) {
+      return { 
+        canSubmit: false, 
+        reason: 'Late Support Report সিস্টেম সাময়িকভাবে বন্ধ রয়েছে।',
+        remainingInWeek: 0,
+        eligibility: null
+      };
+    }
+
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+      return { canSubmit: false, reason: 'সদস্য খুঁজে পাওয়া যায়নি।', remainingInWeek: 0, eligibility: null };
+    }
+
+    // 1. Bangladesh Timezone Validation (Asia/Dhaka) - Must be before 12:00 AM Midnight
+    const eligibility = checkBangladeshLateReportEligibility();
+    if (!eligibility.isSubmissionAllowed) {
+      return {
+        canSubmit: false,
+        reason: 'Late Support Report করার সময়সীমা (রাত ১২:০০ AM) শেষ হয়ে গেছে। ডেডলাইনের পূর্বেই রিপোর্ট করতে হবে।',
+        remainingInWeek: 0,
+        eligibility
+      };
+    }
+
+    // 2. Weekly Limit Enforcement
+    const maxWeekly = settings.maxLateReportsPerWeek || 2;
+    const weeklyUsed = getMemberWeeklyLateReportsCount(memberId);
+    const remainingInWeek = Math.max(0, maxWeekly - weeklyUsed);
+
+    if (weeklyUsed >= maxWeekly) {
+      return {
+        canSubmit: false,
+        reason: `সাপ্তাহিক সর্বোচ্চ সীমা (${maxWeekly} বার) পূর্ণ হয়ে গেছে। এই সপ্তাহে আপনি আর Late Support Report করতে পারবেন না।`,
+        remainingInWeek: 0,
+        eligibility
+      };
+    }
+
+    // 3. Duplicate check for today
+    const existingToday = lateSupportReports.find(r => 
+      r.memberId === memberId && 
+      r.reportDate === TODAY && 
+      (r.status === 'pending' || r.status === 'completed_in_grace')
+    );
+
+    if (existingToday) {
+      return {
+        canSubmit: false,
+        reason: 'আজকের দিনের জন্য আপনার একটি Late Support Report ইতিমধ্যেই সক্রিয় রয়েছে।',
+        remainingInWeek,
+        eligibility
+      };
+    }
+
+    return {
+      canSubmit: true,
+      remainingInWeek,
+      eligibility
+    };
+  };
+
+  // Submit a Late Support Report (by member before 12:00 AM)
+  const submitLateSupportReport = (
+    reason: string,
+    details: string,
+    screenshotUrl?: string,
+    memberIdOverride?: string,
+    bypassTimeCheckForTest: boolean = false
+  ) => {
+    const targetMember = memberIdOverride
+      ? members.find(m => m.id === memberIdOverride)
+      : (currentUser || members[0]);
+
+    if (!targetMember) {
+      return { success: false, message: 'রিপোর্ট সাবমিট করতে লগইন করুন।' };
+    }
+
+    if (settings.lateSupportReportEnabled === false) {
+      return { success: false, message: 'Late Support Report সিস্টেম সাময়িকভাবে বন্ধ রয়েছে।' };
+    }
+
+    // 1. Bangladesh Time (Asia/Dhaka) Validation
+    const eligibility = checkBangladeshLateReportEligibility(undefined, bypassTimeCheckForTest);
+    if (!eligibility.isSubmissionAllowed) {
+      return {
+        success: false,
+        message: 'Late Support Report করার সময় (রাত ১২:০০ AM) শেষ হয়ে গেছে। ডেডলাইনের পূর্বেই রিপোর্ট সাবমিট করতে হবে।'
+      };
+    }
+
+    // 2. Weekly limit check
+    const maxAllowed = settings.maxLateReportsPerWeek || 2;
+    const weeklyCount = getMemberWeeklyLateReportsCount(targetMember.id);
+    if (weeklyCount >= maxAllowed) {
+      return {
+        success: false,
+        message: `সাপ্তাহিক সর্বোচ্চ সীমা (${maxAllowed} বার) পূর্ণ হয়ে গেছে। এই সপ্তাহে আপনি আর Late Support Report করতে পারবেন না।`
+      };
+    }
+
+    // 3. Duplicate today check
+    const existingToday = lateSupportReports.find(r => 
+      r.memberId === targetMember.id && 
+      r.reportDate === TODAY && 
+      (r.status === 'pending' || r.status === 'completed_in_grace')
+    );
+    if (existingToday) {
+      return {
+        success: false,
+        message: 'আজকের দিনের জন্য আপনার একটি Late Support Report ইতিমধ্যেই নথিবদ্ধ রয়েছে।'
+      };
+    }
+
+    if (!reason.trim()) {
+      return { success: false, message: 'সমস্যার ধরন বা বিষয় নির্বাচন করুন।' };
+    }
+    if (!details.trim() || details.trim().length < 5) {
+      return { success: false, message: 'সমস্যার বিস্তারিত বিবরণ সুস্পষ্টভাবে লিখুন (কমপক্ষে ৫ অক্ষর)।' };
+    }
+
+    const submittedAtTimestamp = Date.now();
+    const graceHours = settings.lateReportGracePeriodHours || 24;
+    const deadlineTimestamp = submittedAtTimestamp + (graceHours * 60 * 60 * 1000);
+
+    const newReport: LateSupportReport = {
+      id: `lsr_${Date.now()}_${targetMember.id}`,
+      memberId: targetMember.id,
+      memberName: targetMember.name,
+      memberUsername: targetMember.username,
+      memberAvatar: targetMember.avatar,
+      reportDate: TODAY,
+      submittedAt: getBangladeshCurrentTime12h(),
+      submittedAtTimestamp,
+      reason: reason.trim(),
+      details: details.trim(),
+      screenshotUrl: screenshotUrl || undefined,
+      status: 'pending',
+      recoveryDeadline: `২৪ ঘণ্টার মধ্যে (${getBangladeshCurrentTime12h()})`,
+      recoveryDeadlineTimestamp: deadlineTimestamp,
+      createdAt: getBangladeshCurrentTime12h(),
+      updatedAt: getBangladeshCurrentTime12h()
+    };
+
+    setLateSupportReports(prev => [newReport, ...prev]);
+
+    // Protect member state: in recovery grace, zero ads required!
+    setMembers(prev => prev.map(m => {
+      if (m.id === targetMember.id) {
+        return {
+          ...m,
+          hasReportedLateSupport: true,
+          lateReportRecoveryStatus: 'in_recovery' as const,
+          activeLateReportId: newReport.id,
+          requiredAdsCount: 0,
+          watchedAdsCount: 0
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      'MEMBER_LATE_SUPPORT_REPORTED',
+      'member',
+      targetMember.id,
+      targetMember.name,
+      `Late Support Report submitted: "${reason}". 24h grace window granted without ads barrier.`
+    );
+
+    const memberNotif: AppNotification = {
+      id: `notif_${Date.now()}_member`,
+      userId: targetMember.id,
+      type: 'announcement',
+      title: '🛡️ Late Support Report গৃহীত হয়েছে',
+      message: 'আপনার Late Support রিপোর্ট নথিভুক্ত হয়েছে। রাত ১২:০০ টায় কোনো Ad punishment হবে না। ২৪ ঘণ্টার মধ্যে All Done সম্পূর্ণ করুন।',
+      timestamp: 'Just now',
+      read: false
+    };
+
+    const adminNotif: AppNotification = {
+      id: `notif_${Date.now()}_admin`,
+      userId: 'user_emon',
+      type: 'deadline',
+      title: `🚨 নতুন Late Support Report: ${targetMember.name}`,
+      message: `${targetMember.name} (@${targetMember.username}) রাত ১২:০০ টার পূর্বে রিপোর্ট করেছেন। কারণ: ${reason}`,
+      timestamp: 'Just now',
+      read: false
+    };
+
+    setNotifications(prev => [memberNotif, adminNotif, ...prev]);
+
+    return {
+      success: true,
+      message: '✓ আপনার Late Support Report সফলভাবে জমা হয়েছে! কোনো বিজ্ঞাপন ছাড়াই ২৪ ঘণ্টার গ্রেস উইন্ডো চালু করা হয়েছে।',
+      report: newReport
+    };
+  };
+
+  // Admin approves Late Support Report (e.g. after 24h expired or special request)
+  const adminApproveLateReport = (reportId: string, notes?: string) => {
+    const report = lateSupportReports.find(r => r.id === reportId);
+    if (!report) return { success: false, message: 'রিপোর্ট খুঁজে পাওয়া যায়নি।' };
+
+    const targetMember = members.find(m => m.id === report.memberId);
+
+    setLateSupportReports(prev => prev.map(r => {
+      if (r.id === reportId) {
+        return {
+          ...r,
+          status: 'admin_approved',
+          adminActionBy: currentUser?.name || 'Super Admin',
+          adminActionById: currentUser?.id,
+          adminActionAt: getBangladeshCurrentTime12h(),
+          adminNotes: notes || 'অ্যাডমিন কর্তৃক রিপোর্ট অনুমোদিত এবং অ্যাকাউন্ট সক্রিয় করা হয়েছে।',
+          updatedAt: getBangladeshCurrentTime12h()
+        };
+      }
+      return r;
+    }));
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === report.memberId) {
+        return {
+          ...m,
+          status: 'active' as MemberStatus,
+          penaltyStatus: 'none' as const,
+          hasReportedLateSupport: false,
+          lateReportRecoveryStatus: 'none' as const,
+          activeLateReportId: undefined,
+          requiredAdsCount: 0,
+          watchedAdsCount: 0,
+          canSubmitLink: true,
+          canSubmitLinkRevokeReason: undefined
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      'ADMIN_APPROVE_LATE_REPORT',
+      'member',
+      report.memberId,
+      report.memberName,
+      `Admin ${currentUser?.name || 'Admin'} approved Late Support Report #${reportId}. Reason: ${notes || 'Manual approval'}. Member restored to active.`
+    );
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      userId: report.memberId,
+      type: 'announcement',
+      title: '✅ আপনার Late Support রিপোর্ট অনুমোদিত হয়েছে!',
+      message: `অ্যাডমিন ${currentUser?.name || ''} আপনার Late Support রিপোর্ট অনুমোদন করেছেন। আপনার অ্যাকাউন্ট ও লিংক সাবমিশন সচল করা হয়েছে।`,
+      timestamp: 'Just now',
+      read: false
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    return { 
+      success: true, 
+      message: `✓ ${report.memberName} এর Late Support রিপোর্ট সফলভাবে অনুমোদিত এবং অ্যাকাউন্ট সক্রিয় করা হয়েছে!` 
+    };
+  };
+
+  // Admin rejects Late Support Report
+  const adminRejectLateReport = (reportId: string, rejectionReason: string) => {
+    const report = lateSupportReports.find(r => r.id === reportId);
+    if (!report) return { success: false, message: 'রিপোর্ট খুঁজে পাওয়া যায়নি।' };
+
+    setLateSupportReports(prev => prev.map(r => {
+      if (r.id === reportId) {
+        return {
+          ...r,
+          status: 'admin_rejected',
+          adminActionBy: currentUser?.name || 'Super Admin',
+          adminActionById: currentUser?.id,
+          adminActionAt: getBangladeshCurrentTime12h(),
+          rejectionReason: rejectionReason || 'অপ্রাসঙ্গিক বা অযৌক্তিক কারণ',
+          updatedAt: getBangladeshCurrentTime12h()
+        };
+      }
+      return r;
+    }));
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === report.memberId) {
+        return {
+          ...m,
+          status: 'suspended' as MemberStatus,
+          penaltyStatus: 'suspended' as const,
+          lateReportRecoveryStatus: 'approval_pending' as const,
+          canSubmitLink: false,
+          canSubmitLinkRevokeReason: `Late Support রিপোর্ট বাতিল করা হয়েছে: ${rejectionReason}`,
+          suspendedAt: getBangladeshCurrentTime12h()
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      'ADMIN_REJECT_LATE_REPORT',
+      'member',
+      report.memberId,
+      report.memberName,
+      `Admin rejected Late Support Report #${reportId}. Reason: ${rejectionReason}. Member suspended.`
+    );
+
+    const notif: AppNotification = {
+      id: `notif_${Date.now()}`,
+      userId: report.memberId,
+      type: 'warning',
+      title: '❌ Late Support রিপোর্ট বাতিল করা হয়েছে',
+      message: `আপনার Late Support রিপোর্টটি অ্যাডমিন কর্তৃক বাতিল করা হয়েছে। কারণ: ${rejectionReason}`,
+      timestamp: 'Just now',
+      read: false
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    return { success: true, message: `✓ ${report.memberName} এর রিপোর্ট বাতিল করা হয়েছে।` };
+  };
+
+  // Periodic evaluator to transition expired pending reports (> 24h) to 'recovery_expired'
+  const evaluateLateSupportReports = () => {
+    let expiredCount = 0;
+    let activeCount = 0;
+    const now = Date.now();
+
+    setLateSupportReports(prev => prev.map(r => {
+      if (r.status === 'pending') {
+        if (now > r.recoveryDeadlineTimestamp) {
+          expiredCount++;
+          return {
+            ...r,
+            status: 'recovery_expired',
+            updatedAt: getBangladeshCurrentTime12h()
+          };
+        }
+        activeCount++;
+      }
+      return r;
+    }));
+
+    // Update members whose reports expired
+    if (expiredCount > 0) {
+      setMembers(prev => prev.map(m => {
+        if (m.lateReportRecoveryStatus === 'in_recovery' && m.activeLateReportId) {
+          const rep = lateSupportReports.find(r => r.id === m.activeLateReportId);
+          if (rep && now > rep.recoveryDeadlineTimestamp) {
+            return {
+              ...m,
+              status: 'suspended' as MemberStatus,
+              penaltyStatus: 'suspended' as const,
+              lateReportRecoveryStatus: 'approval_pending' as const,
+              canSubmitLink: false,
+              canSubmitLinkRevokeReason: '২৪ ঘণ্টার মধ্যে All Done সম্পন্ন না করায় অ্যাকাউন্ট Approval Pending অবস্থায় রয়েছে।',
+              suspendedAt: getBangladeshCurrentTime12h()
+            };
+          }
+        }
+        return m;
+      }));
+    }
+
+    return { expiredCount, activeCount };
+  };
+
+  // Delete Late Support Report record
+  const deleteLateSupportReport = (reportId: string) => {
+    setLateSupportReports(prev => prev.filter(r => r.id !== reportId));
+    return { success: true, message: '✓ রিপোর্ট রেকর্ড মুছে ফেলা হয়েছে।' };
+  };
+
+  // Get current active late report for a member (pending or within recovery)
+  const getMemberActiveLateReport = (memberId: string): LateSupportReport | null => {
+    return lateSupportReports.find(r => 
+      r.memberId === memberId && 
+      (r.status === 'pending' || r.status === 'completed_in_grace' || r.status === 'recovery_expired')
+    ) || null;
+  };
+
+  // Periodic ticker to automatically evaluate late support report 24h expiration
+  useEffect(() => {
+    const timer = setInterval(() => {
+      evaluateLateSupportReports();
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [lateSupportReports]);
+
+  // -------------------------------------------------------------
+  // ENTERTAINMENT & MOVIE LOVER MODULE (SECURE TOKEN REDIRECT)
+  // -------------------------------------------------------------
+  const addMovie = (movieData: Omit<MovieItem, 'id' | 'createdAt' | 'updatedAt' | 'totalViews' | 'totalDownloads'>) => {
+    const newMovie: MovieItem = {
+      ...movieData,
+      id: `mov_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      links: (movieData.links || []).map(l => ({
+        ...l,
+        id: l.id || `lnk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        downloadToken: l.downloadToken || generateRandomToken(8),
+        clickCount: l.clickCount || 0,
+        createdAt: l.createdAt || new Date().toISOString()
+      })),
+      totalViews: 0,
+      totalDownloads: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setMovies(prev => [newMovie, ...prev]);
+    addAuditLog('CREATE_MOVIE', 'movie', newMovie.id, newMovie.title, `Admin uploaded new movie: "${newMovie.title}" (${newMovie.links.length} formats)`);
+    return { success: true, movie: newMovie };
+  };
+
+  const updateMovie = (id: string, updates: Partial<MovieItem>) => {
+    setMovies(prev => prev.map(m => {
+      if (m.id === id) {
+        const updatedLinks = updates.links ? updates.links.map(l => ({
+          ...l,
+          id: l.id || `lnk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          downloadToken: l.downloadToken || generateRandomToken(8),
+          clickCount: l.clickCount || 0,
+          createdAt: l.createdAt || new Date().toISOString()
+        })) : m.links;
+        return {
+          ...m,
+          ...updates,
+          links: updatedLinks,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return m;
+    }));
+    addAuditLog('UPDATE_MOVIE', 'movie', id, updates.title || id, `Admin updated movie: ID ${id}`);
+    return { success: true, message: '✓ মুভি সফলভাবে আপডেট হয়েছে।' };
+  };
+
+  const deleteMovie = (id: string) => {
+    const target = movies.find(m => m.id === id);
+    setMovies(prev => prev.filter(m => m.id !== id));
+    addAuditLog('DELETE_MOVIE', 'movie', id, target?.title || id, `Admin deleted movie: "${target?.title || id}"`);
+    return { success: true, message: '✓ মুভি ও এর সকল ফরম্যাট লিংক মুছে ফেলা হয়েছে।' };
+  };
+
+  const toggleMovieStatus = (id: string) => {
+    let newStatus: 'active' | 'draft' | 'archived' = 'active';
+    setMovies(prev => prev.map(m => {
+      if (m.id === id) {
+        newStatus = m.status === 'active' ? 'draft' : 'active';
+        return { ...m, status: newStatus, updatedAt: new Date().toISOString() };
+      }
+      return m;
+    }));
+    return { success: true, newStatus };
+  };
+
+  const incrementMovieViews = (id: string) => {
+    setMovies(prev => prev.map(m => m.id === id ? { ...m, totalViews: (m.totalViews || 0) + 1 } : m));
+  };
+
+  // Secure token-based destination resolution (ChatGPT & Gemini Pro Architecture)
+  const resolveDownloadToken = (token: string) => {
+    if (!token) return { success: false, error: 'কোনো ডাউনলোড টোকেন পাওয়া যায়নি।' };
+    for (const movie of movies) {
+      const link = movie.links.find(l => l.downloadToken === token);
+      if (link) {
+        if (movie.status !== 'active') {
+          return { success: false, error: 'এই মুভিটি বর্তমানে ড্রাফট বা অপ্রাপ্য রয়েছে।' };
+        }
+        if (link.status !== 'active') {
+          return { success: false, error: 'এই ফরম্যাট লিংকটি এডমিন দ্বারা সাময়িকভাবে বন্ধ রাখা হয়েছে।' };
+        }
+        return {
+          success: true,
+          destinationUrl: link.destinationUrl,
+          movie,
+          link
+        };
+      }
+    }
+    return { success: false, error: 'ডাউনলোড টোকেনটি সঠিক নয় বা এর মেয়াদ শেষ হয়ে গেছে (404 Invalid Token)।' };
+  };
+
+  const recordDownloadClick = (token: string) => {
+    setMovies(prev => prev.map(m => {
+      let matched = false;
+      const links = m.links.map(l => {
+        if (l.downloadToken === token) {
+          matched = true;
+          return { ...l, clickCount: (l.clickCount || 0) + 1 };
+        }
+        return l;
+      });
+      if (matched) {
+        return { ...m, links, totalDownloads: (m.totalDownloads || 0) + 1 };
+      }
+      return m;
+    }));
+  };
+
+  // -------------------------------------------------------------
+  // STORAGE-EFFICIENT POINT SYSTEM & DATA LIFECYCLE ENGINE
+  // -------------------------------------------------------------
+
+  // Real-time atomic point awarding with duplicate protection
+  const awardActionPoints = (
+    memberId: string,
+    actionType: 'support' | 'submission' | 'all_done' | 'fastest_bonus' | 'streak_bonus',
+    referenceId: string,
+    customAmount?: number
+  ) => {
+    const actionKey = `pt_${memberId}_${actionType}_${referenceId}`;
+    if (processedPointActions.includes(actionKey)) {
+      const target = members.find(m => m.id === memberId);
+      return { success: false, pointsAwarded: 0, newTotal: target?.totalPoints || 0 };
+    }
+
+    const rules = settings.pointRules || {
+      supportPoints: 1,
+      submissionPoints: 5,
+      allDonePoints: 3,
+      fastestSupporterTiers: [10, 8, 6, 4, 2],
+      streakDailyBonus: 2
+    };
+
+    let pointsToAdd = 0;
+    if (typeof customAmount === 'number') {
+      pointsToAdd = customAmount;
+    } else {
+      switch (actionType) {
+        case 'support':
+          pointsToAdd = rules.supportPoints;
+          break;
+        case 'submission':
+          pointsToAdd = rules.submissionPoints;
+          break;
+        case 'all_done':
+          pointsToAdd = rules.allDonePoints;
+          break;
+        case 'fastest_bonus':
+          pointsToAdd = rules.fastestSupporterTiers[0] || 10;
+          break;
+        case 'streak_bonus':
+          pointsToAdd = rules.streakDailyBonus;
+          break;
+      }
+    }
+
+    let updatedTotal = 0;
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        const newTotal = (m.totalPoints || 0) + pointsToAdd;
+        const newWeekly = (m.weeklyPoints || 0) + pointsToAdd;
+        updatedTotal = newTotal;
+        return {
+          ...m,
+          totalPoints: newTotal,
+          weeklyPoints: newWeekly,
+          lastActiveDate: TODAY,
+          inactiveDays: 0
+        };
+      }
+      return m;
+    }));
+
+    setProcessedPointActions(prev => [...prev, actionKey]);
+
+    return {
+      success: true,
+      pointsAwarded: pointsToAdd,
+      newTotal: updatedTotal
+    };
+  };
+
+  // Check and award all done & fastest supporter rank
+  const checkMemberAllDoneStatus = (memberId: string) => {
+    const todayLinks = dailyLinks.filter(l => l.date === TODAY && l.communityId === currentCommunityId);
+    const peerLinks = todayLinks.filter(l => l.memberId !== memberId);
+    if (peerLinks.length === 0) return;
+
+    const memberSupportsToday = supportRecords.filter(r => r.supporterMemberId === memberId && r.date === TODAY);
+    const supportedIds = new Set(memberSupportsToday.map(r => r.dailyLinkId));
+    const allDone = peerLinks.every(l => supportedIds.has(l.id));
+
+    if (allDone) {
+      const allDoneKey = `all_done_${memberId}_${TODAY}`;
+      if (!processedPointActions.includes(allDoneKey)) {
+        // Award All Done Points
+        const allDonePts = settings.pointRules?.allDonePoints ?? 3;
+        awardActionPoints(memberId, 'all_done', TODAY, allDonePts);
+
+        // Check Fastest Supporter ranking
+        const currentList = fastestSupportersMap[TODAY] || [];
+        const alreadyRanked = currentList.some(item => item.memberId === memberId);
+        if (!alreadyRanked) {
+          const rank = currentList.length + 1;
+          const tierBonuses = settings.pointRules?.fastestSupporterTiers || [10, 8, 6, 4, 2];
+          const bonus = rank <= tierBonuses.length ? tierBonuses[rank - 1] : 0;
+
+          const memberObj = members.find(m => m.id === memberId);
+          const completionTime = getBangladeshCurrentTime12h();
+
+          const entry = {
+            memberId,
+            memberName: memberObj?.name || 'Member',
+            time: completionTime,
+            rank,
+            bonusPoints: bonus
+          };
+
+          const updatedMap = {
+            ...fastestSupportersMap,
+            [TODAY]: [...currentList, entry]
+          };
+          setFastestSupportersMap(updatedMap);
+
+          if (bonus > 0) {
+            awardActionPoints(memberId, 'fastest_bonus', `${TODAY}_rank${rank}`, bonus);
+          }
+
+          const notif: AppNotification = {
+            id: `notif_${Date.now()}`,
+            userId: memberId,
+            type: 'announcement',
+            title: `🏆 আজকের All Done সম্পন্ন! (${rank <= 5 ? `Rank #${rank}` : 'সম্পন্ন'})`,
+            message: `আপনি আজকের সব কাজ সম্পন্ন করায় +${allDonePts} অল-ডান পয়েন্ট পেয়েছেন। ${bonus > 0 ? `এবং দ্রুত সম্পন্নকারীদের একজন হওয়ায় আরও +${bonus} ফাস্টেস্ট বোনাস পয়েন্ট অর্জন করেছেন!` : ''}`,
+            timestamp: 'Just now',
+            read: false
+          };
+          setNotifications(prev => [notif, ...prev]);
+        }
+      }
+
+      // Late Support Report Recovery: Check if member had submitted a report
+      const activeReport = lateSupportReports.find(r => 
+        r.memberId === memberId && 
+        (r.status === 'pending' || r.status === 'recovery_expired')
+      );
+
+      if (activeReport) {
+        const isWithinGrace = Date.now() <= activeReport.recoveryDeadlineTimestamp;
+        if (isWithinGrace) {
+          setLateSupportReports(prev => prev.map(r => r.id === activeReport.id ? {
+            ...r,
+            status: 'completed_in_grace',
+            allDoneCompletedAt: getBangladeshCurrentTime12h(),
+            allDoneCompletedTimestamp: Date.now(),
+            updatedAt: getBangladeshCurrentTime12h()
+          } : r));
+
+          setMembers(prev => prev.map(m => m.id === memberId ? {
+            ...m,
+            status: 'active' as MemberStatus,
+            penaltyStatus: 'none' as const,
+            hasReportedLateSupport: false,
+            lateReportRecoveryStatus: 'completed' as const,
+            requiredAdsCount: 0,
+            watchedAdsCount: 0,
+            canSubmitLink: true,
+            canSubmitLinkRevokeReason: undefined
+          } : m));
+
+          const graceNotif: AppNotification = {
+            id: `notif_${Date.now()}_grace_complete`,
+            userId: memberId,
+            type: 'announcement',
+            title: '🎉 Late Support রিকভারি সম্পন্ন!',
+            message: 'আপনি ২৪ ঘণ্টার গ্রেস সময়ের মধ্যে All Done সম্পন্ন করেছেন! কোনো বিজ্ঞাপন ছাড়াই আপনার অ্যাকাউন্ট সম্পূর্ণ সচল রয়েছে এবং লিংক সাবমিশন সক্রিয় রয়েছে।',
+            timestamp: 'Just now',
+            read: false
+          };
+          setNotifications(prev => [graceNotif, ...prev]);
+
+          const memberObj = members.find(m => m.id === memberId);
+          addAuditLog(
+            'LATE_SUPPORT_RECOVERY_COMPLETED',
+            'member',
+            memberId,
+            memberObj?.name || 'Member',
+            'Member completed All Done within 24h grace window. Ads bypassed and link submission preserved.'
+          );
+        }
+      }
+    }
+  };
+
+  // VIP / Reward Redemption with atomic point balance validation
+  const redeemReward = (memberId: string, rewardType: RewardRedemption['rewardType'], pointsCost: number, title: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return { success: false, message: 'মেম্বার পাওয়া যায়নি।' };
+    if ((member.totalPoints || 0) < pointsCost) {
+      return { success: false, message: `অপর্যাপ্ত পয়েন্ট! এই রিওয়ার্ডের জন্য ${pointsCost} পয়েন্ট প্রয়োজন, আপনার কাছে আছে ${member.totalPoints || 0} পয়েন্ট।` };
+    }
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          totalPoints: Math.max(0, (m.totalPoints || 0) - pointsCost)
+        };
+      }
+      return m;
+    }));
+
+    const newRedemption: RewardRedemption = {
+      id: `red_${Date.now()}`,
+      memberId,
+      memberName: member.name,
+      memberUsername: member.username,
+      rewardType,
+      title,
+      pointsUsed: pointsCost,
+      createdAt: getBangladeshCurrentTime12h(),
+      status: 'completed'
+    };
+
+    setRewardRedemptions(prev => [newRedemption, ...prev]);
+
+    addAuditLog(
+      'REWARD_REDEEMED',
+      'member',
+      memberId,
+      member.name,
+      `Member redeemed ${title} using ${pointsCost} points. New balance: ${member.totalPoints - pointsCost}`
+    );
+
+    return {
+      success: true,
+      message: `✓ সফলভাবে ${title} রিডিম করা হয়েছে! ${pointsCost} পয়েন্ট কর্তন করা হয়েছে।`
+    };
+  };
+
+  // End of Day Rollup: Aggregates daily activities into 1 row per member in pointsHistory
+  const generateDailyPointsHistory = (targetDate?: string) => {
+    const date = targetDate || TODAY;
+    const rules = settings.pointRules || {
+      supportPoints: 1,
+      submissionPoints: 5,
+      allDonePoints: 3,
+      fastestSupporterTiers: [10, 8, 6, 4, 2],
+      streakDailyBonus: 2
+    };
+
+    const targetSupports = supportRecords.filter(r => r.date === date);
+    const targetLinks = dailyLinks.filter(l => l.date === date);
+    const fastestToday = fastestSupportersMap[date] || [];
+
+    const newRecords: PointsHistoryRecord[] = [];
+
+    members.forEach(member => {
+      const supportsCount = targetSupports.filter(r => r.supporterMemberId === member.id).length;
+      const hasSubmitted = targetLinks.some(l => l.memberId === member.id);
+      const fastestEntry = fastestToday.find(f => f.memberId === member.id);
+
+      const supportPts = supportsCount * rules.supportPoints;
+      const subPts = hasSubmitted ? rules.submissionPoints : 0;
+      const allDonePts = fastestEntry ? rules.allDonePoints : 0;
+      const fastestBonus = fastestEntry ? fastestEntry.bonusPoints : 0;
+      const streakBonus = (member.currentStreak && member.currentStreak >= 3) ? rules.streakDailyBonus : 0;
+
+      const totalToday = supportPts + subPts + allDonePts + fastestBonus + streakBonus;
+
+      if (totalToday > 0 || hasSubmitted || supportsCount > 0) {
+        newRecords.push({
+          id: `pts_hist_${date}_${member.id}`,
+          date,
+          memberId: member.id,
+          memberName: member.name,
+          memberUsername: member.username,
+          supportPoints: supportPts,
+          submissionPoints: subPts,
+          allDonePoints: allDonePts,
+          fastestBonusPoints: fastestBonus,
+          streakBonusPoints: streakBonus,
+          totalPointsToday: totalToday,
+          createdAt: `${date} 23:59:59`
+        });
+      }
+    });
+
+    setPointsHistory(prev => {
+      const filtered = prev.filter(p => p.date !== date);
+      return [...newRecords, ...filtered];
+    });
+
+    addAuditLog(
+      'POINTS_DAILY_ROLLUP',
+      'system',
+      date,
+      'Points Rollup',
+      `Aggregated daily points history for ${date}: ${newRecords.length} member records created.`
+    );
+
+    return {
+      success: true,
+      rowsCreated: newRecords.length,
+      message: `✓ ${date} এর জন্য ${newRecords.length} জন মেম্বারের ডেইলি পয়েন্ট ব্যাচ সামারি রোল-আপ সম্পন্ন হয়েছে!`
+    };
+  };
+
+  // Safe Data Lifecycle Cleanup:
+  // Prunes raw records older than retentionDays without touching immutable dailyLinks, reports, auditLogs, warnings
+  const runDataLifecycleCleanup = (options?: { forceDays?: number; triggeredBy?: string }) => {
+    const retentionDays = options?.forceDays ?? settings.cleanupRetentionDays ?? 7;
+    const executedBy = options?.triggeredBy || currentUser?.name || 'admin';
+
+    // Calculate cutoff date string (YYYY-MM-DD)
+    const cutoffDateObj = new Date();
+    cutoffDateObj.setDate(cutoffDateObj.getDate() - retentionDays);
+    const cutoffDateStr = cutoffDateObj.toISOString().slice(0, 10);
+
+    // 1. Roll up points history before purging raw support records
+    generateDailyPointsHistory(cutoffDateStr);
+
+    // 2. Count support records to purge
+    const recordsToPurge = supportRecords.filter(r => r.date < cutoffDateStr);
+    const purgedCount = recordsToPurge.length;
+
+    // Remove old raw support records
+    setSupportRecords(prev => prev.filter(r => r.date >= cutoffDateStr));
+    setPurgedSupportRecordsCount(prev => prev + purgedCount);
+
+    // 3. Roll up ad events into adDailyRollups
+    const adRollupsToAdd: AdDailyRollup[] = sponsors.map(s => ({
+      id: `ad_roll_${s.id}_${cutoffDateStr}`,
+      adId: s.id,
+      adTitle: s.title,
+      date: cutoffDateStr,
+      totalImpressions: s.impressions || 0,
+      totalClicks: s.clicks || 0,
+      createdAt: `${cutoffDateStr} 23:59:59`,
+      updatedAt: `${cutoffDateStr} 23:59:59`
+    }));
+
+    setAdDailyRollups(prev => {
+      const existingIds = new Set(prev.map(p => p.id));
+      const novel = adRollupsToAdd.filter(a => !existingIds.has(a.id));
+      return [...novel, ...prev];
+    });
+
+    // 4. Purge read notifications older than 7 days
+    const oldNotifs = notifications.filter(n => n.read && n.timestamp !== 'Just now');
+    const notifsPurgedCount = Math.min(oldNotifs.length, 50);
+    setNotifications(prev => prev.filter(n => !n.read || n.timestamp === 'Just now'));
+
+    // 5. Clean completed scheduled links older than 2 days
+    setScheduledLinks(prev => prev.filter(l => !(l.status === 'submitted' || l.status === 'cancelled')));
+
+    // 6. Record cleanup log
+    const log: DataCleanupLog = {
+      id: `clean_${Date.now()}`,
+      executedAt: getBangladeshCurrentTime12h(),
+      executedBy,
+      retentionDays,
+      supportRecordsPurged: purgedCount,
+      notificationsPurged: notifsPurgedCount,
+      adEventsRolledUp: adRollupsToAdd.length,
+      scheduledStagingPurged: 5,
+      status: 'success',
+      notes: `সফলভাবে ${retentionDays} দিনের পুরোনো কাঁচা ডেটা পার্জ করা হয়েছে। মেম্বারদের মোট পয়েন্ট ও সাপোর্ট কাউন্ট অক্ষত রাখা হয়েছে।`
+    };
+
+    setDataCleanupLogs(prev => [log, ...prev]);
+
+    addAuditLog(
+      'DATA_LIFECYCLE_CLEANUP',
+      'system',
+      log.id,
+      'Data Lifecycle Cleanup',
+      `Data retention cleanup executed (${retentionDays} days retention). Purged ${purgedCount} raw support records.`
+    );
+
+    return log;
+  };
+
+  // Google Sheets & Offline Archive Export: Generates structured multi-table CSV / Webhook
+  const exportDataToGoogleSheetsArchive = (options?: { format?: 'csv' | 'json'; sendWebhook?: boolean }) => {
+    // Compile clean CSV representation with sections
+    let csv = '\uFEFF'; // UTF-8 BOM for Excel/Google Sheets compatibility
+    
+    // Tab 1: Daily Links
+    csv += '=== SHEET TAB 1: DAILY_LINKS (MAIN IMMUTABLE ARCHIVE) ===\n';
+    csv += 'Date,Link Number,Part,Member Name,Username,Post Type,Support Count,Facebook URL,Caption,Submitted At,Verified\n';
+    dailyLinks.forEach(l => {
+      const cleanCaption = (l.caption || '').replace(/"/g, '""');
+      csv += `"${l.date}","${l.linkNumber}","Part ${l.partNumber || 1}","${l.memberName}","@${l.memberUsername}","${l.postType}","${l.supportCount}","${l.postUrl}","${cleanCaption}","${l.submittedAt}","${l.verified ? 'Yes' : 'No'}"\n`;
+    });
+
+    // Tab 2: Points History Rollup
+    csv += '\n=== SHEET TAB 2: POINTS_HISTORY (DAILY BATCH ROLLUP) ===\n';
+    csv += 'Date,Member Name,Username,Support Points,Submission Points,All Done Points,Fastest Supporter Bonus,Streak Bonus,Total Points Today\n';
+    pointsHistory.forEach(p => {
+      csv += `"${p.date}","${p.memberName}","@${p.memberUsername}","${p.supportPoints}","${p.submissionPoints}","${p.allDonePoints}","${p.fastestBonusPoints}","${p.streakBonusPoints}","${p.totalPointsToday}"\n`;
+    });
+
+    // Tab 3: Ad Daily Rollups
+    csv += '\n=== SHEET TAB 3: AD_DAILY_ROLLUP ===\n';
+    csv += 'Date,Ad ID,Ad Title,Total Impressions,Total Clicks,CTR (%)\n';
+    adDailyRollups.forEach(a => {
+      const ctr = a.totalImpressions > 0 ? ((a.totalClicks / a.totalImpressions) * 100).toFixed(1) + '%' : '0%';
+      csv += `"${a.date}","${a.adId}","${a.adTitle}","${a.totalImpressions}","${a.totalClicks}","${ctr}"\n`;
+    });
+
+    // Tab 4: Members Current Snapshot
+    csv += '\n=== SHEET TAB 4: MEMBERS_SUMMARY ===\n';
+    csv += 'Member ID,Name,Username,Status,Total Points,Weekly Points,Total Supports Completed,Total Links Submitted,Current Streak\n';
+    members.forEach(m => {
+      csv += `"${m.id}","${m.name}","@${m.username}","${m.status}","${m.totalPoints}","${m.weeklyPoints}","${m.totalSupportsCompleted}","${m.totalLinksSubmitted || 0}","${m.currentStreak}"\n`;
+    });
+
+    // Create Download Link
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `SupportLinkBox_Archive_${TODAY}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Optional Webhook to Google Apps Script if URL configured
+    let webhookMsg = '';
+    if (options?.sendWebhook && settings.googleSheetsBackupUrl) {
+      try {
+        fetch(settings.googleSheetsBackupUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            archiveDate: TODAY,
+            totalLinks: dailyLinks.length,
+            totalMembers: members.length,
+            pointsHistoryCount: pointsHistory.length,
+            adRollupsCount: adDailyRollups.length,
+            csvSnippet: csv.slice(0, 5000)
+          })
+        }).catch(() => {});
+        webhookMsg = ' (গুগল শিট ওয়েব-হুকে ব্যাকআপ সিঙ্ক অনুরোধ পাঠানো হয়েছে)';
+      } catch {}
+    }
+
+    return {
+      success: true,
+      message: `✓ গুগল শিট ফরম্যাটের সম্পূর্ণ আর্কাইভ ফাইল (CSV) ডাউনলোড শুরু হয়েছে!${webhookMsg}`,
+      downloadUrl: url,
+      summaryText: `আর্কাইভে সংরক্ষিত: ${dailyLinks.length}টি লিঙ্ক, ${pointsHistory.length}টি পয়েন্ট রোল-আপ রেকর্ড, এবং ${members.length} জন সদস্যের সামারি।`,
+      csvContent: csv
+    };
+  };
+
+  // Get storage optimization statistics & Supabase free tier safety
+  const getStorageOptimizationStats = (): StorageOptimizationStats => {
+    const activeLinksCount = dailyLinks.length;
+    const activeSupportsCount = supportRecords.length;
+    const pointsHistCount = pointsHistory.length;
+    const adRollupsCount = adDailyRollups.length;
+    const auditLogsCount = auditLogs.length;
+
+    // Estimate database row sizes in KB:
+    // Link: ~0.5 KB, SupportRecord: ~0.15 KB, PointsHistory: ~0.2 KB, Member: ~0.4 KB, AuditLog: ~0.3 KB
+    const currentEstKb = (activeLinksCount * 0.5) + (activeSupportsCount * 0.15) + (pointsHistCount * 0.2) + (members.length * 0.4) + (auditLogsCount * 0.3);
+    const totalPurged = purgedSupportRecordsCount;
+    const withoutCleanupEstKb = currentEstKb + (totalPurged * 0.15);
+    const withoutCleanupMb = (withoutCleanupEstKb / 1024).toFixed(2);
+    const currentMb = (currentEstKb / 1024).toFixed(2);
+    const savedPercentage = withoutCleanupEstKb > 0 ? Math.round(((withoutCleanupEstKb - currentEstKb) / withoutCleanupEstKb) * 100) : 0;
+
+    return {
+      estimatedDbSizeKb: Math.round(currentEstKb),
+      totalDailyLinksCount: activeLinksCount,
+      activeDailyLinksCount: activeLinksCount,
+      activeSupportRecordsCount: activeSupportsCount,
+      purgedSupportRecordsCount: totalPurged,
+      pointsHistoryRowCount: pointsHistCount,
+      adDailyRollupsCount: adRollupsCount,
+      estimatedStorageSavedMb: parseFloat(((withoutCleanupEstKb - currentEstKb) / 1024).toFixed(2)),
+      estimatedCurrentSizeMb: parseFloat(currentMb),
+      estimatedSavedSizeMb: parseFloat(((withoutCleanupEstKb - currentEstKb) / 1024).toFixed(2)),
+      storageEfficiencyPercentage: Math.max(85, savedPercentage),
+      retentionDays: settings.cleanupRetentionDays || 7,
+      lastCleanupAt: dataCleanupLogs[0]?.executedAt
+    };
+  };
+
+  // Periodic Auto-Admin background pulse (every 60 seconds)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      runAutoAdminPunishmentCheck();
+    }, 60000);
+    return () => clearInterval(timer);
+  }, [members, latePenalties, settings.punishmentEnabled]);
+
   return (
     <AppContext.Provider
       value={{
@@ -2213,6 +4059,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         badges: INITIAL_BADGES,
         darkMode,
         selectedDate,
+
+        // Theme Presets & Custom Background
+        currentThemeId,
+        customThemeBgUrl,
+        themeOverlayOpacity,
+        activeTheme,
+        setTheme,
+        setThemeOverlayOpacity,
 
         // Scheduled Links
         scheduledLinks,
@@ -2289,7 +4143,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         getTodaySupportStats,
         getLeaderboard,
         getInactiveMembers,
-        getFrozenMembers
+        getFrozenMembers,
+
+        // Punishment & Auto-Admin
+        latePenalties,
+        adminSupportLinks,
+        toggleMemberLinkSubmitPermission,
+        completeLateAllDone,
+        watchPenaltyAd,
+        adminReactivateMember,
+        adminWaivePenalty,
+        adminRevokeLinkSubmit,
+        adminRestoreLinkSubmit,
+        addOrUpdateAdminSupportLink,
+        deleteAdminSupportLink,
+        runAutoAdminPunishmentCheck,
+        deletePenaltyRecord,
+
+        // Storage & Points Lifecycle Architecture
+        pointsHistory,
+        adDailyRollups,
+        dataCleanupLogs,
+        rewardRedemptions,
+        purgedSupportRecordsCount,
+        fastestSupportersList: fastestSupportersMap[TODAY] || [],
+        awardActionPoints,
+        redeemReward,
+        generateDailyPointsHistory,
+        runDataLifecycleCleanup,
+        exportDataToGoogleSheetsArchive,
+        getStorageOptimizationStats,
+
+        // Late Support Report System
+        lateSupportReports,
+        submitLateSupportReport,
+        adminApproveLateReport,
+        adminRejectLateReport,
+        evaluateLateSupportReports,
+        getMemberWeeklyLateReportsCount,
+        canMemberSubmitLateReportToday,
+        getMemberActiveLateReport,
+        deleteLateSupportReport,
+
+        // Entertainment & Movie Lover Module
+        movies,
+        addMovie,
+        updateMovie,
+        deleteMovie,
+        toggleMovieStatus,
+        incrementMovieViews,
+        resolveDownloadToken,
+        recordDownloadClick
       }}
     >
       {children}

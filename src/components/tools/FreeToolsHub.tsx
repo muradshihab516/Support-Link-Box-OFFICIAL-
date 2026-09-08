@@ -11,13 +11,24 @@ import {
   Link as LinkIcon, 
   ExternalLink,
   MessageSquareQuote,
-  Flame
+  Flame,
+  Film,
+  Clapperboard,
+  Tv,
+  ArrowLeft,
+  ChevronRight,
+  Music,
+  ShieldCheck
 } from 'lucide-react';
 import { DisplayAdSlot } from '../monetization/DisplayAdSlot';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
+import { MovieLoverView } from '../entertainment/MovieLoverView';
 
 export const FreeToolsHub: React.FC = () => {
+  const [mainCategory, setMainCategory] = useState<'creator_tools' | 'entertainment'>('creator_tools');
+  const [entertainmentTab, setEntertainmentTab] = useState<'home' | 'movie_lover'>('home');
   const [activeTool, setActiveTool] = useState<'link_checker' | 'caption_gen' | 'hashtags' | 'text_formatter' | 'engagement_calc' | 'char_counter'>('caption_gen');
+
 
   // Tool 1: Link Validator State
   const [testUrl, setTestUrl] = useState('');
@@ -155,98 +166,284 @@ export const FreeToolsHub: React.FC = () => {
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
               <Wrench className="w-6 h-6 text-indigo-400" />
-              Creator & Community Free Tools Hub
+              Creator & Entertainment Tools Hub
             </h1>
             <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs rounded-full">
-              100% Free
+              100% Free Access
             </span>
           </div>
           <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            Free viral tools to optimize your Facebook posts, engagement rates, hashtags and captions.
+            বিনোদন ও মুভি লাভার হাব এবং ফেসবুক কনটেন্ট ও এনগেজমেন্ট অপ্টিমাইজেশন টুলস।
           </p>
+        </div>
+
+        {/* Main Category Selector Pills */}
+        <div className="flex items-center bg-[#131317] p-1.5 rounded-2xl border border-[#222228] shadow-inner shrink-0">
+          <button
+            onClick={() => setMainCategory('entertainment')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              mainCategory === 'entertainment'
+                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Film className="w-4 h-4" />
+            <span>Entertainment</span>
+            <span className="px-1.5 py-0.2 rounded bg-white/20 text-[10px] font-black">NEW</span>
+          </button>
+
+          <button
+            onClick={() => setMainCategory('creator_tools')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              mainCategory === 'creator_tools'
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <Wrench className="w-4 h-4" />
+            <span>Creator Tools</span>
+          </button>
         </div>
       </div>
 
       {/* Top Banner Sponsor */}
       <SponsoredBanner position="top_banner" />
 
-      {/* Tool Navigation Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        <button
-          onClick={() => setActiveTool('caption_gen')}
-          className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
-            activeTool === 'caption_gen'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
-          }`}
-        >
-          <MessageSquareQuote className="w-5 h-5 mb-1 text-inherit" />
-          <span className="text-xs font-bold">Caption Generator</span>
-        </button>
+      {/* ENTERTAINMENT SECTION */}
+      {mainCategory === 'entertainment' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          
+          {/* Entertainment Portal Home (Movies are NOT shown upfront here) */}
+          {entertainmentTab === 'home' && (
+            <div className="space-y-6">
+              
+              {/* Portal Header */}
+              <div className="p-6 sm:p-7 rounded-2xl bg-gradient-to-r from-purple-950/40 via-[#131318] to-indigo-950/30 border border-purple-500/20 shadow-xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30 flex items-center gap-1.5">
+                    <Film className="w-3.5 h-3.5 text-purple-400" />
+                    Entertainment Portal
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                    Cloud Storage Mirrors
+                  </span>
+                </div>
+                <h2 className="text-xl sm:text-2xl font-black text-white">
+                  বিনোদন ও মিডিয়া পোর্টাল
+                </h2>
+                <p className="text-xs sm:text-sm text-gray-400 max-w-2xl leading-relaxed">
+                  পছন্দের বিনোদন ক্যাটাগরি বেছে নিতে নিচের অপশন থেকে নির্বাচন করুন। মুভি সংগ্রহ দেখতে <strong>Movie Lover</strong> সেকশনে প্রবেশ করুন।
+                </p>
+              </div>
 
-        <button
-          onClick={() => { setActiveTool('hashtags'); generateHashtags('Technology'); }}
-          className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
-            activeTool === 'hashtags'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
-          }`}
-        >
-          <Hash className="w-5 h-5 mb-1 text-inherit" />
-          <span className="text-xs font-bold">Hashtag Finder</span>
-        </button>
+              {/* Entertainment Category Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                
+                {/* 1. MOVIE LOVER CARD */}
+                <div
+                  onClick={() => setEntertainmentTab('movie_lover')}
+                  className="group relative p-6 rounded-2xl bg-[#141419] hover:bg-[#191924] border border-gray-800 hover:border-purple-500/50 transition-all duration-300 cursor-pointer shadow-lg hover:shadow-purple-500/10 flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="w-12 h-12 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-110 transition-transform">
+                      <Clapperboard className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-purple-300 transition-colors">
+                          Movie Lover (মুভি লাভার)
+                        </h3>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-[10px] font-bold">
+                          সক্রিয়
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+                        বিভিন্ন ক্লাউড মিরর (Pixeldrain, GDFlex, GDFile) থেকে 480p, 720p, 1080p ও 4K কোয়ালিটির মুভি সংগ্রহ ও নিরাপদ ডাউনলোড।
+                      </p>
+                    </div>
+                  </div>
 
-        <button
-          onClick={() => setActiveTool('text_formatter')}
-          className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
-            activeTool === 'text_formatter'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
-          }`}
-        >
-          <Type className="w-5 h-5 mb-1 text-inherit" />
-          <span className="text-xs font-bold">Fancy FB Fonts</span>
-        </button>
+                  <div className="pt-4 mt-4 border-t border-gray-800/80 flex items-center justify-between text-xs font-bold text-purple-400 group-hover:text-purple-300">
+                    <span>মুভি দেখতে ক্লিক করুন (Open Movies)</span>
+                    <ChevronRight className="w-4 h-4 group-hover:translate-x-1.5 transition-transform" />
+                  </div>
+                </div>
 
-        <button
-          onClick={() => setActiveTool('link_checker')}
-          className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
-            activeTool === 'link_checker'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
-          }`}
-        >
-          <LinkIcon className="w-5 h-5 mb-1 text-inherit" />
-          <span className="text-xs font-bold">FB Link Checker</span>
-        </button>
+                {/* 2. TRAILERS & TEASERS */}
+                <div className="p-6 rounded-2xl bg-[#121215] border border-gray-800/60 opacity-60 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="w-12 h-12 rounded-xl bg-gray-800/80 flex items-center justify-center text-gray-500">
+                      <Tv className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base sm:text-lg font-bold text-gray-300">Trailers & Teasers</h3>
+                        <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px] font-bold">
+                          Coming Soon
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                        শীঘ্রই আসছে: আসন্ন নতুন সিনেমা ও ওয়েব সিরিজের হাই-কোয়ালিটি অফিশিয়াল ট্রেইলার ও প্রিভিউ।
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-4 mt-4 border-t border-gray-800/40 text-xs text-gray-600">
+                    পরবর্তী আপডেটে উন্মুক্ত হবে
+                  </div>
+                </div>
 
-        <button
-          onClick={() => setActiveTool('engagement_calc')}
-          className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
-            activeTool === 'engagement_calc'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
-          }`}
-        >
-          <Calculator className="w-5 h-5 mb-1 text-inherit" />
-          <span className="text-xs font-bold">Engagement Rate</span>
-        </button>
+                {/* 3. SOUNDTRACKS & OST */}
+                <div className="p-6 rounded-2xl bg-[#121215] border border-gray-800/60 opacity-60 flex flex-col justify-between">
+                  <div className="space-y-3">
+                    <div className="w-12 h-12 rounded-xl bg-gray-800/80 flex items-center justify-center text-gray-500">
+                      <Music className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base sm:text-lg font-bold text-gray-300">OST & Soundtracks</h3>
+                        <span className="px-2 py-0.5 rounded bg-gray-800 text-gray-400 text-[10px] font-bold">
+                          Coming Soon
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                        শীঘ্রই আসছে: পছন্দের সিনেমার আবহ সঙ্গীত, জনপ্রিয় সাউন্ডট্র্যাক ও অডিও হাব।
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-4 mt-4 border-t border-gray-800/40 text-xs text-gray-600">
+                    পরবর্তী আপডেটে উন্মুক্ত হবে
+                  </div>
+                </div>
 
-        <button
-          onClick={() => setActiveTool('char_counter')}
-          className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
-            activeTool === 'char_counter'
-              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
-              : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
-          }`}
-        >
-          <Sparkles className="w-5 h-5 mb-1 text-inherit" />
-          <span className="text-xs font-bold">Word Counter</span>
-        </button>
-      </div>
+              </div>
+
+              {/* Legal & DMCA Disclaimer Notice */}
+              <div className="p-4 rounded-xl bg-indigo-950/20 border border-indigo-500/20 flex items-start gap-3 text-xs text-gray-300">
+                <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-indigo-300">কনটেন্ট ও কপিরাইট পলিসি নোটিশ:</div>
+                  <p className="text-[11px] text-gray-400 leading-relaxed">
+                    এই সাইটে কোনো মিডিয়া ফাইল হোস্ট করা হয় না। সকল তথ্য ও ফাইল পাবলিক ক্লাউড স্টোরেজ মিরর (Pixeldrain, GDFlex, GDFile) দ্বারা সংরক্ষিত। কোনো স্বত্বাধিকারী অভিযোগ জানাতে চাইলে অ্যাডমিন টিমের সাথে যোগাযোগ করলে সংশ্লিষ্ট লিংক তাৎক্ষণিক প্রত্যাহার করা হবে।
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* Sub-tab view: Movie Lover (Only displayed after clicking on Movie Lover) */}
+          {entertainmentTab === 'movie_lover' && (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              
+              {/* Back to Entertainment Navigation Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-[#121216] p-3 px-4 rounded-xl border border-gray-800">
+                <button
+                  onClick={() => setEntertainmentTab('home')}
+                  className="flex items-center gap-2 text-xs font-bold text-indigo-400 hover:text-white transition-colors"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>← এন্টারটেইনমেন্ট পোর্টালে ফিরে যান (Back to Entertainment Portal)</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-1 rounded-lg bg-purple-600/20 text-purple-300 border border-purple-500/30 text-xs font-bold flex items-center gap-1.5">
+                    <Clapperboard className="w-3.5 h-3.5 text-purple-400" />
+                    Movie Lover Section
+                  </span>
+                </div>
+              </div>
+
+              {/* The Movies View */}
+              <MovieLoverView />
+
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* CREATOR TOOLS SECTION */}
+      {mainCategory === 'creator_tools' && (
+        <>
+          {/* Tool Navigation Tabs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 animate-in fade-in duration-200">
+            <button
+              onClick={() => setActiveTool('caption_gen')}
+              className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
+                activeTool === 'caption_gen'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                  : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
+              }`}
+            >
+              <MessageSquareQuote className="w-5 h-5 mb-1 text-inherit" />
+              <span className="text-xs font-bold">Caption Generator</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTool('hashtags'); generateHashtags('Technology'); }}
+              className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
+                activeTool === 'hashtags'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                  : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
+              }`}
+            >
+              <Hash className="w-5 h-5 mb-1 text-inherit" />
+              <span className="text-xs font-bold">Hashtag Finder</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTool('text_formatter')}
+              className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
+                activeTool === 'text_formatter'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                  : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
+              }`}
+            >
+              <Type className="w-5 h-5 mb-1 text-inherit" />
+              <span className="text-xs font-bold">Fancy FB Fonts</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTool('link_checker')}
+              className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
+                activeTool === 'link_checker'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                  : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
+              }`}
+            >
+              <LinkIcon className="w-5 h-5 mb-1 text-inherit" />
+              <span className="text-xs font-bold">FB Link Checker</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTool('engagement_calc')}
+              className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
+                activeTool === 'engagement_calc'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                  : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
+              }`}
+            >
+              <Calculator className="w-5 h-5 mb-1 text-inherit" />
+              <span className="text-xs font-bold">Engagement Rate</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTool('char_counter')}
+              className={`p-3 rounded-xl border text-left flex flex-col items-center text-center transition-all ${
+                activeTool === 'char_counter'
+                  ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                  : 'bg-[#131315] border-[#1E1E20] text-gray-400 hover:text-white hover:border-indigo-500/40'
+              }`}
+            >
+              <Sparkles className="w-5 h-5 mb-1 text-inherit" />
+              <span className="text-xs font-bold">Word Counter</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* TOOL 1: CAPTION GENERATOR */}
-      {activeTool === 'caption_gen' && (
+      {mainCategory === 'creator_tools' && activeTool === 'caption_gen' && (
+
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-7 space-y-5 shadow-xs">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -322,7 +519,7 @@ export const FreeToolsHub: React.FC = () => {
       )}
 
       {/* TOOL 2: HASHTAG FINDER */}
-      {activeTool === 'hashtags' && (
+      {mainCategory === 'creator_tools' && activeTool === 'hashtags' && (
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-7 space-y-5 shadow-xs">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -375,7 +572,7 @@ export const FreeToolsHub: React.FC = () => {
       )}
 
       {/* TOOL 3: FANCY TEXT FORMATTER */}
-      {activeTool === 'text_formatter' && (
+      {mainCategory === 'creator_tools' && activeTool === 'text_formatter' && (
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-7 space-y-5 shadow-xs">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -447,7 +644,7 @@ export const FreeToolsHub: React.FC = () => {
       )}
 
       {/* TOOL 4: FACEBOOK LINK VALIDATOR */}
-      {activeTool === 'link_checker' && (
+      {mainCategory === 'creator_tools' && activeTool === 'link_checker' && (
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-7 space-y-5 shadow-xs">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -494,7 +691,7 @@ export const FreeToolsHub: React.FC = () => {
       )}
 
       {/* TOOL 5: ENGAGEMENT CALCULATOR */}
-      {activeTool === 'engagement_calc' && (
+      {mainCategory === 'creator_tools' && activeTool === 'engagement_calc' && (
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-7 space-y-5 shadow-xs">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -567,7 +764,7 @@ export const FreeToolsHub: React.FC = () => {
       )}
 
       {/* TOOL 6: CHARACTER & WORD COUNTER */}
-      {activeTool === 'char_counter' && (
+      {mainCategory === 'creator_tools' && activeTool === 'char_counter' && (
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-7 space-y-5 shadow-xs">
           <div>
             <h3 className="text-base font-bold text-white flex items-center gap-2">

@@ -8,12 +8,18 @@ import {
   Snowflake, 
   DollarSign, 
   FileText,
-  CheckCircle2
+  CheckCircle2,
+  Database,
+  FileSpreadsheet
 } from 'lucide-react';
 import { exportToCSV } from '../../utils/helpers';
 
 export const ExportCenter: React.FC = () => {
-  const { members, dailyLinks, sponsors, revenueLogs, auditLogs, currentWeek } = useApp();
+  const { members, dailyLinks, sponsors, revenueLogs, auditLogs, currentWeek, exportDataToGoogleSheetsArchive, pointsHistory } = useApp();
+
+  const handleExportGoogleSheetsArchive = () => {
+    exportDataToGoogleSheetsArchive({ format: 'csv' });
+  };
 
   const handleExportMembers = () => {
     const data = members.map(m => ({
@@ -110,6 +116,14 @@ export const ExportCenter: React.FC = () => {
   };
 
   const exportCards = [
+    {
+      title: 'Google Sheets Storage Archive (.CSV)',
+      desc: 'Complete storage-safe archive (Daily Links, Points History, Ad Rollups & Member snapshots) for Google Sheets / Excel.',
+      icon: FileSpreadsheet,
+      color: 'text-emerald-400',
+      action: handleExportGoogleSheetsArchive,
+      count: `${dailyLinks.length + pointsHistory.length} combined records`
+    },
     {
       title: 'Full Members Directory',
       desc: 'Export all 2,000+ members with status, links, points, streak, and profile URLs.',

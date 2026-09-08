@@ -8,12 +8,13 @@ import { InactiveFrozenManagement } from './InactiveFrozenManagement';
 import { NoticesWarningsAdmin } from './NoticesWarningsAdmin';
 import { ReportsAdmin } from './ReportsAdmin';
 import { WeeklyManagement } from './WeeklyManagement';
-import { SponsorAdsAdmin } from './SponsorAdsAdmin';
-import { AffiliateAdmin } from './AffiliateAdmin';
-import { RevenueAnalytics } from './RevenueAnalytics';
 import { AuditLogsAdmin } from './AuditLogsAdmin';
 import { SettingsAdmin } from './SettingsAdmin';
 import { ExportCenter } from './ExportCenter';
+import { PunishmentManagement } from './PunishmentManagement';
+import { LateSupportReportsAdmin } from './LateSupportReportsAdmin';
+import { DataLifecycleAndPoints } from './DataLifecycleAndPoints';
+import { UploadMovieAdmin } from './UploadMovieAdmin';
 
 export const AdminLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -23,6 +24,8 @@ export const AdminLayout: React.FC = () => {
     switch (activeTab) {
       case 'overview':
         return <AdminDashboard onSelectTab={setActiveTab} />;
+      case 'upload_movie':
+        return <UploadMovieAdmin />;
       case 'members':
         return <MemberManagement />;
       case 'bulk_import':
@@ -31,18 +34,18 @@ export const AdminLayout: React.FC = () => {
         return <TodayLinksAdmin />;
       case 'inactive_frozen':
         return <InactiveFrozenManagement />;
+      case 'punishment':
+        return <PunishmentManagement />;
+      case 'late_reports':
+        return <LateSupportReportsAdmin />;
       case 'notices':
         return <NoticesWarningsAdmin />;
       case 'reports':
         return <ReportsAdmin />;
       case 'weekly_session':
         return <WeeklyManagement />;
-      case 'sponsors':
-        return <SponsorAdsAdmin />;
-      case 'affiliate':
-        return <AffiliateAdmin />;
-      case 'revenue':
-        return <RevenueAnalytics />;
+      case 'storage_points':
+        return <DataLifecycleAndPoints />;
       case 'audit_logs':
         return <AuditLogsAdmin />;
       case 'settings':

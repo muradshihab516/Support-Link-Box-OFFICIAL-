@@ -1,7 +1,7 @@
 export type UserRole = 'member' | 'admin' | 'super_admin' | 'moderator' | 'finance_admin';
 export type MemberRole = UserRole;
 
-export type MemberStatus = 'active' | 'inactive' | 'frozen' | 'suspended' | 'removed';
+export type MemberStatus = 'active' | 'inactive' | 'frozen' | 'suspended' | 'removed' | 'temp_removed';
 
 export type DailySupportStatusType = 'completed' | 'partially_completed' | 'failed' | 'excused';
 
@@ -64,6 +64,20 @@ export interface Member {
   notes?: string;
   frozenAt?: string;
   suspendedAt?: string;
+  canSubmitLink?: boolean; // When false, admin has revoked link submit permission
+  canSubmitLinkRevokeReason?: string;
+  canSubmitLinkRevokedAt?: string;
+  canSubmitLinkRevokedBy?: string;
+  penaltyStatus?: 'none' | 'temp_removed' | 'suspended';
+  penaltyDate?: string;
+  penaltyHoursLate?: number;
+  requiredAdsCount?: number;
+  watchedAdsCount?: number;
+  penaltyDeadlineMissedAt?: string;
+  hasReportedLateSupport?: boolean;
+  lateReportRecoveryStatus?: 'none' | 'in_recovery' | 'completed' | 'expired' | 'approval_pending';
+  activeLateReportId?: string;
+  lateReportsUsedThisWeek?: number;
 }
 
 export type PostContentType = 'photo' | 'video';
@@ -339,6 +353,106 @@ export interface SystemSettings {
   scheduleStartHourOffset?: number; // default 2 hours after opening (e.g. 10:00 -> 12:00)
   scheduleAllowedStartTime?: string; // default "12:00"
   scheduleAllowedEndTime?: string; // default "16:50"
+
+  // Auto-Admin & Punishment Settings
+  punishmentEnabled?: boolean; // default true
+  allDoneDeadlineTime?: string; // default "00:00" (12:00 AM)
+  lateRecoveryStartTime?: string; // default "00:00"
+  lateRecoveryEndTime?: string; // default "10:00" (10:00 AM)
+  lateRecoveryDurationHours?: number; // default 10
+  adsPerLateHour?: number; // default 1 ad per late hour
+  maxPenaltyAdsCap?: number; // default 5 or 10 ads max
+  adReactivationCode?: string; // Custom embed/script for video ad network
+  adNetworkType?: 'rewarded_simulator' | 'custom_embed';
+
+  // Storage & Points Lifecycle Architecture
+  cleanupRetentionDays?: number; // default 7 days (Admin configurable)
+  autoCleanupEnabled?: boolean; // default true
+  googleSheetsBackupUrl?: string; // Optional webhook to export monthly archive to Google Sheets
+  googleSheetsMonthlyTabPrefix?: string; // e.g. "SLB-Archive"
+  pointRules?: {
+    supportPoints: number; // default 1
+    submissionPoints: number; // default 5
+    allDonePoints: number; // default 3
+    fastestSupporterTiers: [number, number, number, number, number]; // [10, 8, 6, 4, 2]
+    streakDailyBonus: number; // default 2
+  };
+
+  // Late Support Report Configuration
+  lateSupportReportEnabled?: boolean; // default true
+  maxLateReportsPerWeek?: number; // default 2 (Admin configurable)
+  lateReportGracePeriodHours?: number; // default 24
+}
+
+export interface AdminSupportLink {
+  id: string;
+  adminId: string;
+  adminName: string;
+  adminUsername: string;
+  adminAvatar?: string;
+  adminRole: UserRole;
+  platformName: string; // e.g., 'Facebook Profile', 'Messenger', 'WhatsApp', 'Telegram'
+  supportUrl: string; // e.g. https://facebook.com/...
+  displayLabel?: string;
+  notes?: string;
+  isActive: boolean;
+  updatedAt: string;
+}
+
+export interface LatePenaltyRecord {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberUsername: string;
+  memberAvatar: string;
+  date: string; // YYYY-MM-DD
+  deadlineTime: string; // e.g. "12:00 AM" (00:00)
+  completedAt?: string; // e.g. "01:45 AM"
+  hoursLate: number; // e.g. 1.8 -> 2 hours
+  lateDurationFormatted: string; // e.g. "১ ঘণ্টা ৪৫ মিনিট"
+  requiredAds: number;
+  adsWatched: number;
+  status: 'temp_removed' | 'reactivated' | 'suspended' | 'admin_waived';
+  reactivatedAt?: string;
+  suspendedAt?: string;
+  adminNotes?: string;
+  resolvedByAdminId?: string;
+  resolvedByAdminName?: string;
+  createdAt: string;
+  createdAtTimestamp: number;
+}
+
+export type LateSupportReportStatus = 
+  | 'pending'            // Submitted before 12 AM, in 24h grace window (bypasses Ads!)
+  | 'completed_in_grace' // Member finished All Done within recovery period -> Active without Ads
+  | 'recovery_expired'   // > 24h passed without All Done -> Status becomes Approval Pending
+  | 'admin_approved'     // Admin manually approved member and restored permissions
+  | 'admin_rejected';    // Admin rejected report -> penalties apply
+
+export interface LateSupportReport {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberUsername: string;
+  memberAvatar: string;
+  reportDate: string; // YYYY-MM-DD
+  submittedAt: string; // e.g. "11:42 PM"
+  submittedAtTimestamp: number;
+  reason: string; // Problem category e.g. "বিদ্যুৎ বিভ্রাট / লোডশেডিং"
+  details: string; // Specific description written by member
+  screenshotUrl?: string; // Optional proof / screenshot
+  status: LateSupportReportStatus;
+  recoveryDeadline: string; // e.g. "Tomorrow 11:42 PM"
+  recoveryDeadlineTimestamp: number; // submittedAtTimestamp + 24 * 60 * 60 * 1000
+  allDoneCompletedAt?: string;
+  allDoneCompletedTimestamp?: number;
+  adminActionBy?: string;
+  adminActionById?: string;
+  adminActionAt?: string;
+  adminNotes?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RevenueRecord {
@@ -353,3 +467,128 @@ export interface RevenueRecord {
   notes?: string;
   reference?: string;
 }
+
+// ==========================================
+// POINT SYSTEM + DATA LIFECYCLE ARCHITECTURE
+// ==========================================
+
+export interface PointsHistoryRecord {
+  id: string;
+  date: string; // YYYY-MM-DD
+  memberId: string;
+  memberName: string;
+  memberUsername: string;
+  supportPoints: number;
+  submissionPoints: number;
+  allDonePoints: number;
+  fastestBonusPoints: number;
+  streakBonusPoints: number;
+  totalPointsToday: number;
+  createdAt: string;
+}
+
+export interface AdDailyRollup {
+  id: string;
+  adId: string;
+  adTitle: string;
+  date: string; // YYYY-MM-DD
+  totalImpressions: number;
+  totalClicks: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataCleanupLog {
+  id: string;
+  executedAt: string;
+  executedBy: string; // 'auto_scheduler' | 'admin'
+  retentionDays: number;
+  supportRecordsPurged: number;
+  notificationsPurged: number;
+  adEventsRolledUp: number;
+  scheduledStagingPurged: number;
+  status: 'success' | 'warning' | 'failed';
+  notes: string;
+}
+
+export interface RewardRedemption {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberUsername: string;
+  rewardType: 'vip_badge' | 'custom_highlight' | 'freeze_pass' | 'skip_day';
+  title: string;
+  pointsUsed: number;
+  createdAt: string;
+  status: 'completed' | 'pending';
+}
+
+export interface StorageOptimizationStats {
+  estimatedDbSizeKb: number;
+  totalDailyLinksCount: number;
+  activeDailyLinksCount?: number;
+  activeSupportRecordsCount: number;
+  purgedSupportRecordsCount: number;
+  pointsHistoryRowCount: number;
+  adDailyRollupsCount: number;
+  estimatedStorageSavedMb: number;
+  estimatedCurrentSizeMb?: number;
+  estimatedSavedSizeMb?: number;
+  storageEfficiencyPercentage?: number;
+  retentionDays: number;
+  lastCleanupAt?: string;
+}
+
+// Entertainment & Movie Lover Module
+export interface MovieFormatLink {
+  id: string;
+  quality: string; // e.g., '480p', '720p', '1080p', '4K UHD'
+  serverName: string; // e.g., 'Pixeldrain', 'GDFlex', 'GDFile', 'Mega', 'Google Drive'
+  destinationUrl: string; // Protected destination URL
+  downloadToken: string; // Opaque security token e.g., '7Kx92LmQ'
+  fileSize?: string; // e.g., '850 MB', '1.4 GB'
+  status: 'active' | 'inactive';
+  clickCount: number;
+  createdAt: string;
+}
+
+export interface MovieItem {
+  id: string;
+  title: string;
+  thumbnail: string;
+  description?: string;
+  genre: string[];
+  releaseYear?: number;
+  duration?: string;
+  language?: string;
+  rating?: number;
+  isFeatured?: boolean;
+  status: 'active' | 'draft' | 'archived';
+  adSettings?: {
+    enableTimerGateway?: boolean;
+    gatewayTimerSeconds?: number;
+    sponsorNote?: string;
+    attachedAdId?: string;
+  };
+  links: MovieFormatLink[];
+  totalViews: number;
+  totalDownloads: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Background Picture Theme Presets
+export interface ThemePreset {
+  id: string;
+  name: string;
+  banglaName: string;
+  description: string;
+  category: 'cosmic' | 'cyberpunk' | 'nature' | 'cinema' | 'anime' | 'sunset' | 'minimal' | 'custom';
+  bgImageUrl: string;
+  thumbnailUrl: string;
+  accentColor: string;
+  glowColor: string;
+  badgeText: string;
+  tagline: string;
+}
+

@@ -28,7 +28,8 @@ import {
   CornerDownRight,
   Video,
   Crown,
-  Bell
+  Bell,
+  Lock
 } from 'lucide-react';
 import { getFacebookAppUrl, getFacebookWebBrowserUrl } from '../../utils/facebookLinks';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
@@ -36,6 +37,9 @@ import { InAppPostViewerModal } from './InAppPostViewerModal';
 import { SponsoredBanner } from '../monetization/SponsoredBanner';
 import { DisplayAdSlot } from '../monetization/DisplayAdSlot';
 import { ReportModal } from './ReportModal';
+import { LateAllDoneAdModal } from '../common/LateAllDoneAdModal';
+import { SuspendedMemberNotice } from './SuspendedMemberNotice';
+import { LateSupportReportModal } from './LateSupportReportModal';
 
 interface MemberDashboardProps {
   onNavigate: (view: string) => void;
@@ -49,17 +53,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
     dailyLinks, 
     notices, 
     reports,
+    latePenalties,
+    lateSupportReports,
+    canMemberSubmitLateReportToday,
+    getMemberActiveLateReport,
     updateDailyLinkUrl,
     resolveReportsForLink,
     getTodaySupportStats, 
     markLinkSupported,
     badges,
-    setActiveReportModalId
+    setActiveReportModalId,
+    completeLateAllDone
   } = useApp();
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showPenaltyAdModal, setShowPenaltyAdModal] = useState(false);
+  const [showLateReportModal, setShowLateReportModal] = useState(false);
   const [selectedPostForInAppView, setSelectedPostForInAppView] = useState<DailyLink | null>(null);
   const [reportTarget, setReportTarget] = useState<{ linkId: string; name: string } | null>(null);
+
+  const activeLateReport = currentUser ? getMemberActiveLateReport(currentUser.id) : null;
 
   // Link editing & resolution state for link owner
   const [isEditLinkOpen, setIsEditLinkOpen] = useState(false);
@@ -167,14 +180,55 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Late Support Report Trigger / Active Grace Badge */}
+          {currentUser && (
+            activeLateReport && activeLateReport.status === 'pending' ? (
+              <button
+                onClick={() => setShowLateReportModal(true)}
+                className="px-3.5 py-2.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-300 hover:text-white text-xs sm:text-sm font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                title="লেট সাপোর্ট গ্রেস উইন্ডো কার্যকর আছে"
+              >
+                <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
+                <span>Grace Active</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowLateReportModal(true)}
+                className="px-3.5 py-2.5 bg-white dark:bg-[#141418] hover:bg-gray-100 dark:hover:bg-[#1E1E24] border border-amber-500/40 hover:border-amber-500/70 text-amber-600 dark:text-amber-300 text-xs sm:text-sm font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                title="দেরিতে সাপোর্টের আবেদন করুন (রাত ১২:০০ টার আগে)"
+              >
+                <Clock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
+                <span>Report Late Support</span>
+              </button>
+            )
+          )}
+
           {!stats.hasSubmittedToday ? (
-            <button
-              onClick={() => setShowSubmitModal(true)}
-              className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-95"
-            >
-              <PlusCircle className="w-4 h-4" />
-              Submit Today's Link
-            </button>
+            currentUser.canSubmitLink === false ? (
+              <div 
+                className="w-full sm:w-auto px-4 py-2.5 bg-gray-800 text-gray-400 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 border border-gray-700 cursor-not-allowed"
+                title="লিংক সাবমিশন সাময়িকভাবে স্থগিত"
+              >
+                <Lock className="w-4 h-4 text-red-400" />
+                <span>লিংক সাবমিশন স্থগিত</span>
+              </div>
+            ) : currentUser.status === 'temp_removed' ? (
+              <div 
+                className="w-full sm:w-auto px-4 py-2.5 bg-amber-950/40 text-amber-400 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 border border-amber-500/40 cursor-not-allowed"
+                title="সাময়িক রিমুভ অবস্থায় লিংক সাবমিট করা যাবে না"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span>সাময়িক রিমুভ (Locked)</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowSubmitModal(true)}
+                className="w-full sm:w-auto px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 shadow-sm transition-transform active:scale-95"
+              >
+                <PlusCircle className="w-4 h-4" />
+                Submit Today's Link
+              </button>
+            )
           ) : (
             <div className="px-3.5 py-1.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-700 dark:text-emerald-300 text-xs font-semibold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -183,6 +237,143 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
           )}
         </div>
       </div>
+
+      {/* Suspended Member Notice */}
+      {currentUser.status === 'suspended' && (
+        <SuspendedMemberNotice />
+      )}
+
+      {/* Temp Removed Notice & Late All Done Recovery Action */}
+      {currentUser.status === 'temp_removed' && (
+        <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-950/60 via-[#1e150d] to-[#141210] border-2 border-amber-500/60 shadow-xl space-y-4 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-inner">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/25 border border-amber-500/50 text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                    Temp Removed Status
+                  </span>
+                  <span className="text-xs text-amber-300/80">১২:০০ AM All Done মিসিং</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-extrabold text-white mt-0.5">
+                  আপনি লিংক বক্স থেকে সাময়িকভাবে রিমুভ অবস্থায় আছেন
+                </h3>
+              </div>
+            </div>
+
+            {stats.pendingCount === 0 ? (
+              <button
+                onClick={() => {
+                  completeLateAllDone(currentUser.id);
+                  setShowPenaltyAdModal(true);
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 text-black font-extrabold text-xs sm:text-sm rounded-xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] shrink-0"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Re-Activate করুন (Ad দেখুন)</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => onNavigate('daily_links')}
+                className="px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm rounded-xl flex items-center justify-center gap-2 transition-colors shrink-0"
+              >
+                <span>বাকি {stats.pendingCount} টি সাপোর্ট দিন →</span>
+              </button>
+            )}
+          </div>
+
+          <div className="p-3 rounded-xl bg-black/40 border border-amber-500/20 text-xs text-amber-200/90 leading-relaxed space-y-1">
+            <p>
+              রাত ১২:০০ টায় সাপোর্ট বাকি থাকায় অটো এডমিন সিস্টেম আপনাকে সাময়িকভাবে রিমুভ করেছে। 
+              যতক্ষণ না আপনি সাপোর্ট সম্পূর্ণ করবেন, ঐ দিনের লিংক আপনার সামনেই থাকবে।
+            </p>
+            {stats.pendingCount > 0 ? (
+              <p className="font-semibold text-amber-300">
+                👉 আপনার এখনও {stats.pendingCount} টি সাপোর্ট বাকি আছে। সাপোর্ট শেষ করলে অ্যাকাউন্ট রি-অ্যাক্টিভেশনের অপশন চালু হবে।
+              </p>
+            ) : (
+              <p className="font-semibold text-emerald-400">
+                ✓ আপনার আজকের সব সাপোর্ট সম্পন্ন হয়েছে! উপরের বাটন চেপে বিজ্ঞাপন দেখে অ্যাকাউন্ট সচল করুন।
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Late Support Active Grace Status Banner */}
+      {currentUser && activeLateReport && (
+        activeLateReport.status === 'pending' ? (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/40 via-[#1a1710] to-[#141418] border border-amber-500/40 shadow-lg space-y-2 animate-in fade-in">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded text-[10px] font-bold uppercase tracking-wider">
+                      Late Support Grace Window
+                    </span>
+                    <span className="text-xs text-amber-300/80">Ad Punishment ছাড় প্রাপ্ত</span>
+                  </div>
+                  <h3 className="text-sm sm:text-base font-bold text-white mt-0.5">
+                    আপনার দেরিতে সাপোর্টের আবেদন সক্রিয় রয়েছে (২৪ ঘণ্টা গ্রেস উইন্ডো)
+                  </h3>
+                </div>
+              </div>
+              <div className="text-left sm:text-right shrink-0">
+                <span className="text-xs font-bold text-amber-400 bg-black/40 px-3 py-1 rounded-lg border border-amber-500/30">
+                  {Math.max(0, Math.ceil((activeLateReport.recoveryDeadlineTimestamp - Date.now()) / (1000 * 60 * 60)))} ঘণ্টা গ্রেস বাকি
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-amber-200/80 leading-relaxed">
+              দেরিতে সাপোর্টের আবেদন থাকায় রাত ১২:০০ টার ডেডলাইনে কোনো Ads বা সাময়িক রিমুভ হয়নি। ২৪ ঘণ্টার মধ্যে বাকি সাপোর্ট সম্পন্ন করে All Done করুন, তাহলে কোনো Ads দেখা ছাড়াই অ্যাকাউন্ট এবং লিংক সাবমিশন সচল থাকবে।
+            </p>
+          </div>
+        ) : activeLateReport.status === 'completed_in_grace' ? (
+          <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 shadow-lg space-y-1 animate-in fade-in">
+            <div className="flex items-center gap-2.5 text-emerald-300 font-bold text-sm">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              <span>অভিনন্দন! ২৪ ঘণ্টার গ্রেস সময়ের মধ্যে All Done সফলভাবে সম্পন্ন হয়েছে</span>
+            </div>
+            <p className="text-xs text-emerald-200/80">
+              দেরিতে সাপোর্টের আবেদন কার্যকর থাকায় কোনো Ad punishment হয়নি। আপনার লিংক স্বাভাবিকভাবে সক্রিয় রয়েছে।
+            </p>
+          </div>
+        ) : activeLateReport.status === 'recovery_expired' ? (
+          <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-500/40 shadow-lg space-y-1 animate-in fade-in">
+            <div className="flex items-center gap-2.5 text-rose-300 font-bold text-sm">
+              <AlertTriangle className="w-5 h-5 text-rose-400" />
+              <span>২৪ ঘণ্টার গ্রেস সময়সীমা অতিক্রম হয়েছে (Approval Pending)</span>
+            </div>
+            <p className="text-xs text-rose-200/80">
+              নির্ধারিত ২৪ ঘণ্টার মধ্যে All Done না করায় অ্যাকাউন্টটি Approval Pending অবস্থায় রয়েছে। অ্যাডমিন ম্যানুয়ালি রিভিউ করে সক্রিয় করবেন।
+            </p>
+          </div>
+        ) : null
+      )}
+
+      {/* Revoked Link Submission Banner */}
+      {currentUser.canSubmitLink === false && (
+        <div className="p-4 rounded-2xl bg-red-950/40 border border-red-500/40 text-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-red-500/20 text-red-400 rounded-xl border border-red-500/30">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <strong className="text-white text-sm block">🔒 লিংক সাবমিশন স্থগিত রয়েছে</strong>
+              <span className="text-red-300/90">কারণ: {currentUser.canSubmitLinkRevokeReason || 'এডমিন নির্দেশনা ও প্ল্যাটফর্ম রুলস ভঙ্গের কারণে'}</span>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-red-500/20 border border-red-500/30 rounded-lg text-red-300 font-bold self-start sm:self-auto">
+            Submission Blocked
+          </span>
+        </div>
+      )}
 
       {/* Warning / Notice Banner (if any) */}
       {userNotices.length > 0 && (
@@ -946,6 +1137,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
           </div>
         </div>
       )}
+
+      {/* Late All Done Rewarded Ad Recovery Modal */}
+      <LateAllDoneAdModal
+        isOpen={showPenaltyAdModal}
+        onClose={() => setShowPenaltyAdModal(false)}
+      />
+
+      {/* Late Support Report Submission Modal */}
+      <LateSupportReportModal
+        isOpen={showLateReportModal}
+        onClose={() => setShowLateReportModal(false)}
+      />
     </div>
   );
 };

@@ -200,7 +200,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
                 }`}
               >
                 <Wrench className="w-4 h-4 text-emerald-500" />
-                Free Tools
+                <span>Tools & Entertainment</span>
               </button>
 
               {currentUser && (currentUser.role === 'admin' || currentUser.role === 'super_admin') && (

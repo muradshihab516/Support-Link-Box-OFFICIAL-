@@ -291,6 +291,66 @@ export const SettingsAdmin: React.FC = () => {
           </div>
         </div>
 
+        {/* Late Support Exception & Grace Settings (Bangladesh Time BST) */}
+        <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-6 space-y-4 shadow-xs">
+          <div className="border-b border-[#1E1E20] pb-3">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Clock className="w-4 h-4 text-amber-400" />
+              <span>Late Support Exception System (দেরিতে সাপোর্টের সেটিংস)</span>
+            </h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              রাত ১২:০০ টার আগে মেম্বারদের "Report a Late Support" আবেদন, Ad punishment ছাড় এবং ২৪ ঘণ্টার গ্রেস উইন্ডো কনফিগার করুন।
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="flex items-center justify-between p-3 bg-[#0E0E10] border border-[#1E1E20] rounded-xl cursor-pointer hover:border-gray-700 transition-colors">
+              <div>
+                <div className="text-xs font-bold text-white">Enable "Report a Late Support" System</div>
+                <div className="text-[11px] text-gray-500">মেম্বারদের সামনে ১২:০০ AM এর আগে রিপোর্ট করার বাটন ও গ্রেস সিস্টেম চালু থাকবে</div>
+              </div>
+              <input
+                type="checkbox"
+                checked={form.lateSupportReportEnabled !== false}
+                onChange={e => setForm({ ...form, lateSupportReportEnabled: e.target.checked })}
+                className="rounded text-amber-500 focus:ring-amber-400 w-4 h-4 bg-[#0E0E10] border-[#1E1E20]"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                  সাপ্তাহিক সর্বোচ্চ রিপোর্ট সীমা (Max Weekly Reports)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="7"
+                  value={form.maxLateReportsPerWeek ?? 2}
+                  onChange={e => setForm({ ...form, maxLateReportsPerWeek: Math.max(1, Number(e.target.value)) })}
+                  className="w-full px-3 py-2 text-xs bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-white font-mono focus:border-amber-500"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">ডিফল্ট: ২ বার প্রতি সপ্তাহে</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">
+                  রিকভারি গ্রেস সময়সীমা (ঘণ্টা) (Grace Period Hours)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="48"
+                  value={form.lateReportGracePeriodHours ?? 24}
+                  onChange={e => setForm({ ...form, lateReportGracePeriodHours: Math.max(1, Number(e.target.value)) })}
+                  className="w-full px-3 py-2 text-xs bg-[#0E0E10] border border-[#1E1E20] rounded-xl text-white font-mono focus:border-amber-500"
+                />
+                <p className="text-[10px] text-gray-500 mt-1">ডিফল্ট: ২৪ ঘণ্টা (২৪ ঘণ্টার মধ্যে All Done করলে লিংক দিতে পারবে, কোনো Ads শো হবে না)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Monetization Engine Toggles */}
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-6 space-y-4 shadow-xs">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">

@@ -16,7 +16,7 @@ import { useApp } from '../../context/AppContext';
 import { DailyLink, PostContentType, LinkCategoryType, getPartRange } from '../../types';
 
 interface LinkEditModalProps {
-  link: DailyLink;
+  link: DailyLink | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -27,18 +27,18 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({ link, isOpen, onCl
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin' || currentUser?.role === 'moderator';
 
   // Form states
-  const [postUrl, setPostUrl] = useState(link.postUrl);
-  const [postType, setPostType] = useState<PostContentType>(link.postType || 'photo');
-  const [caption, setCaption] = useState(link.caption || '');
-  const [instruction, setInstruction] = useState(link.instruction || '');
-  const [category, setCategory] = useState<LinkCategoryType>((link.category as LinkCategoryType) || 'member');
+  const [postUrl, setPostUrl] = useState(link?.postUrl || '');
+  const [postType, setPostType] = useState<PostContentType>(link?.postType || 'photo');
+  const [caption, setCaption] = useState(link?.caption || '');
+  const [instruction, setInstruction] = useState(link?.instruction || '');
+  const [category, setCategory] = useState<LinkCategoryType>((link?.category as LinkCategoryType) || 'member');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 2-minute countdown timer logic
   // deadline in epoch ms
-  const deadline = link.editableUntil || (link.submittedAtTimestamp ? link.submittedAtTimestamp + 120000 : 0);
+  const deadline = link?.editableUntil || (link?.submittedAtTimestamp ? link.submittedAtTimestamp + 120000 : 0);
   
   const calculateRemainingSeconds = () => {
     if (isAdmin) return 9999; // Admins are not restricted
@@ -50,8 +50,8 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({ link, isOpen, onCl
   const [secondsRemaining, setSecondsRemaining] = useState<number>(calculateRemainingSeconds);
 
   useEffect(() => {
-    if (!isOpen) return;
-    setPostUrl(link.postUrl);
+    if (!isOpen || !link) return;
+    setPostUrl(link.postUrl || '');
     setPostType(link.postType || 'photo');
     setCaption(link.caption || '');
     setInstruction(link.instruction || '');
@@ -74,10 +74,10 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({ link, isOpen, onCl
     return () => clearInterval(interval);
   }, [isOpen, link, isAdmin]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !link) return null;
 
   const isExpired = !isAdmin && secondsRemaining <= 0;
-  const partInfo = getPartRange(link.partNumber || Math.ceil(link.linkNumber / 20));
+  const partInfo = getPartRange(link.partNumber || Math.ceil((link.linkNumber || 1) / 20));
 
   const formatCountdown = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -87,6 +87,7 @@ export const LinkEditModal: React.FC<LinkEditModalProps> = ({ link, isOpen, onCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!link) return;
     if (isExpired) {
       setErrorMsg('২ মিনিটের সময়সীমা পার হয়ে গেছে! এখন আর লিংক পরিবর্তন করা সম্ভব নয়।');
       return;

@@ -962,11 +962,13 @@ export const TodayLinksAdmin: React.FC = () => {
       )}
 
       {/* Admin Link Edit Modal (Unlimited Admin Override) */}
-      <LinkEditModal
-        link={editingLink}
-        isOpen={Boolean(editingLink)}
-        onClose={() => setEditingLink(null)}
-      />
+      {editingLink && (
+        <LinkEditModal
+          link={editingLink}
+          isOpen={Boolean(editingLink)}
+          onClose={() => setEditingLink(null)}
+        />
+      )}
 
       {/* Admin Scheduled Link Edit Modal */}
       {editingScheduleItem && (
