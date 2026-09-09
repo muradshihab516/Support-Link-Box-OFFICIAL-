@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS public.daily_links (
     member_name TEXT NOT NULL,
     member_number INTEGER NOT NULL,
     member_avatar TEXT,
+    link_number INTEGER DEFAULT 1,
     post_url TEXT NOT NULL,
     caption TEXT,
     category TEXT DEFAULT 'general',
@@ -119,13 +120,16 @@ CREATE INDEX IF NOT EXISTS idx_supports_supporter ON public.support_records(supp
 CREATE TABLE IF NOT EXISTS public.audit_logs (
     id TEXT PRIMARY KEY,
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    actor_id TEXT NOT NULL,
-    actor_name TEXT NOT NULL,
+    admin_name TEXT,
+    admin_role TEXT,
+    actor_id TEXT,
+    actor_name TEXT,
     action TEXT NOT NULL,
     target_type TEXT NOT NULL,
     target_id TEXT NOT NULL,
-    target_name TEXT NOT NULL,
+    target_name TEXT,
     details TEXT,
+    community_id TEXT DEFAULT 'main',
     ip_address TEXT,
     metadata JSONB
 );

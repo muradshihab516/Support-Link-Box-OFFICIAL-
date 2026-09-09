@@ -249,7 +249,22 @@ export const supabaseDb = {
         console.error('Supabase fetchDailyLinks error:', error);
         return null;
       }
-      return data as DailyLink[];
+      return (data || []).map((row: any): DailyLink => ({
+        id: row.id,
+        memberId: row.member_id,
+        memberName: row.member_name,
+        memberAvatar: row.member_avatar || '',
+        memberUsername: row.member_name?.toLowerCase().replace(/\s+/g, '_') || 'member',
+        linkNumber: row.link_number || 1,
+        postUrl: row.post_url,
+        caption: row.caption || '',
+        category: row.category || 'member',
+        date: row.date || new Date().toISOString().split('T')[0],
+        submittedAt: row.created_at || new Date().toISOString(),
+        supportCount: row.total_supports_received || row.support_count || 0,
+        verified: Boolean(row.verified ?? true),
+        communityId: row.community_id || 'comm_default'
+      }));
     } catch (err) {
       console.error('Supabase fetchDailyLinks exception:', err);
       return null;
@@ -259,7 +274,19 @@ export const supabaseDb = {
   async insertDailyLink(link: DailyLink): Promise<boolean> {
     if (!supabase) return false;
     try {
-      const { error } = await supabase.from('daily_links').insert(link);
+      const { error } = await supabase.from('daily_links').insert({
+        id: link.id,
+        member_id: link.memberId,
+        member_name: link.memberName,
+        member_avatar: link.memberAvatar || null,
+        link_number: link.linkNumber || 1,
+        post_url: link.postUrl,
+        caption: link.caption || null,
+        category: link.category || 'member',
+        status: 'active',
+        date: link.date || new Date().toISOString().split('T')[0],
+        total_supports_received: link.supportCount || 0
+      });
       if (error) {
         console.error('Supabase insertDailyLink error:', error);
         return false;
