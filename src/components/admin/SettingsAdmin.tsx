@@ -10,7 +10,12 @@ import {
   Megaphone,
   AlertTriangle,
   Globe,
-  Radio
+  Radio,
+  Database,
+  RefreshCw,
+  Crown,
+  ExternalLink,
+  Shield
 } from 'lucide-react';
 import { SystemSettings } from '../../types';
 import { 
@@ -20,7 +25,29 @@ import {
 } from '../../utils/bangladeshTime';
 
 export const SettingsAdmin: React.FC = () => {
-  const { settings, updateSettings, resetToDefaultSeed } = useApp();
+  const { 
+    settings, 
+    updateSettings, 
+    resetToDefaultSeed,
+    isSupabaseActive,
+    supabaseSyncStatus,
+    syncDataWithSupabase
+  } = useApp();
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncFeedback(null);
+    try {
+      await syncDataWithSupabase();
+      setSyncFeedback('✓ Supabase ডাটাবেসের সাথে সফলভাবে ডেটা সিঙ্ক সম্পন্ন হয়েছে!');
+    } catch (err: any) {
+      setSyncFeedback('⚠️ সিঙ্ক করার সময় সমস্যা হয়েছে। অনুগ্রহ করে ইন্টারনেট ও পরিবেশ ভেরিয়েবল চেক করুন।');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
 
   const [form, setForm] = useState<SystemSettings>({ 
     ...settings,
@@ -77,6 +104,77 @@ export const SettingsAdmin: React.FC = () => {
 
       <form onSubmit={handleSave} className="space-y-6">
         
+        {/* Supabase Database & Authentication Architecture */}
+        <div className="bg-[#131315] rounded-2xl border border-emerald-500/20 p-5 sm:p-6 space-y-4 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#1E1E20] pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-400" />
+                <span>Supabase ডাটাবেস ও অথেন্টিকেশন স্ট্যাটাস</span>
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                সিস্টেমের সমস্ত ডাটা, মেম্বার টেবিল, অডিট লগ এবং অথেন্টিকেশন Supabase ক্লাউড ডাটাবেসের সাথে সংযুক্ত।
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-1 rounded-full text-xs font-bold font-mono border flex items-center gap-1.5 ${
+                isSupabaseActive
+                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                  : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${isSupabaseActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                {isSupabaseActive ? 'Supabase Active' : 'Local Fallback Storage'}
+              </span>
+
+              <button
+                type="button"
+                onClick={handleManualSync}
+                disabled={isSyncing}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'Sync Now'}
+              </button>
+            </div>
+          </div>
+
+          {syncFeedback && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-xs text-emerald-300 font-medium">
+              {syncFeedback}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-3.5 bg-[#0E0E10] border border-[#1E1E20] rounded-xl space-y-2">
+              <div className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span>Developer & System Admin Account</span>
+              </div>
+              <div className="text-xs text-gray-300 space-y-1">
+                <div>নাম: <span className="font-semibold text-white">Md Shihab Khan</span></div>
+                <div>ইমেইল: <span className="font-mono text-emerald-400">Muradshihab515@gmail.com</span></div>
+                <div className="flex items-center gap-1">
+                  ফেসবুক: <a href="https://www.facebook.com/SmShihab2.0" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline flex items-center gap-0.5">https://www.facebook.com/SmShihab2.0 <ExternalLink className="w-3 h-3" /></a>
+                </div>
+                <div className="text-[11px] text-gray-400 pt-1 border-t border-[#1E1E20]">
+                  পাসওয়ার্ড: যেকোনো সময় লগইন স্ক্রিন বা প্রোফাইল থেকে সেট/আপডেট করা যাবে।
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-[#0E0E10] border border-[#1E1E20] rounded-xl space-y-2">
+              <div className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Supabase PostgreSQL Schema & RLS</span>
+              </div>
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                ডাটাবেসের সম্পূর্ণ SQL স্ক্রিপ্ট <code className="text-indigo-300 bg-[#16161A] px-1 py-0.5 rounded font-mono">supabase-schema.sql</code> ফাইলে প্রস্তুত রয়েছে। এতে Row Level Security (RLS) ও ৫টি টেবিল (members, daily_links, support_records, audit_logs, notices) ডিফাইন করা আছে।
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* General Community Info */}
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-6 space-y-4 shadow-xs">
           <h3 className="text-sm font-bold text-white">

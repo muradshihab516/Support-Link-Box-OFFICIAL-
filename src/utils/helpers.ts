@@ -40,6 +40,20 @@ export const exportToCSV = (filename: string, rows: Record<string, any>[]) => {
   }
 };
 
+export const exportToTextFile = (filename: string, content: string) => {
+  // UTF-8 BOM for perfect Bengali rendering in Notepad and tools
+  const blob = new Blob(['\uFEFF' + content], { type: 'text/plain;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `${filename}_${new Date().toISOString().split('T')[0]}.txt`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+
 export const formatBDT = (amount: number): string => {
   return `৳${amount.toLocaleString('en-US')}`;
 };
@@ -61,7 +75,8 @@ export const getStatusBadgeColor = (status: string): string => {
     case 'partially_completed':
       return 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-800';
     case 'pending':
-      return 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700';
+    case 'pending_approval':
+      return 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700';
     default:
       return 'bg-slate-100 text-slate-700 border-slate-200';
   }

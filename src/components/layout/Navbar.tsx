@@ -427,10 +427,17 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
                 </div>
               ) : (
                 <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition-colors shadow-xs"
+                  onClick={() => {
+                    if (onOpenAuthModal) {
+                      onOpenAuthModal();
+                    } else {
+                      setShowAuthModal(true);
+                    }
+                  }}
+                  className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:opacity-95 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-600/20 flex items-center gap-1.5 active:scale-95"
                 >
-                  Log In
+                  <Sparkles className="w-3.5 h-3.5 text-pink-200" />
+                  <span>লগইন / রেজিস্টার</span>
                 </button>
               )}
             </div>

@@ -15,6 +15,7 @@ import { PunishmentManagement } from './PunishmentManagement';
 import { LateSupportReportsAdmin } from './LateSupportReportsAdmin';
 import { DataLifecycleAndPoints } from './DataLifecycleAndPoints';
 import { UploadMovieAdmin } from './UploadMovieAdmin';
+import { AdminRoleManagement } from './AdminRoleManagement';
 
 export const AdminLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
@@ -24,6 +25,8 @@ export const AdminLayout: React.FC = () => {
     switch (activeTab) {
       case 'overview':
         return <AdminDashboard onSelectTab={setActiveTab} />;
+      case 'admin_roles':
+        return <AdminRoleManagement />;
       case 'upload_movie':
         return <UploadMovieAdmin />;
       case 'members':

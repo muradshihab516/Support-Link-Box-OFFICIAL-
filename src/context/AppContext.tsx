@@ -36,9 +36,12 @@ import {
   MovieFormatLink,
   MovieRequestItem,
   MovieRequestStatus,
-  ThemePreset
+  ThemePreset,
+  NameChangeRequest
 } from '../types';
 import { THEME_PRESETS, DEFAULT_THEME_ID } from '../data/themePresets';
+import { normalizeFacebookName, validateAndExtractFacebookId } from '../utils/facebookIdentity';
+import { exportToCSV, exportToTextFile } from '../utils/helpers';
 import {
   INITIAL_MEMBERS,
   INITIAL_DAILY_LINKS,
@@ -66,6 +69,12 @@ import {
 import { INITIAL_MOVIES, INITIAL_MOVIE_REQUESTS, generateRandomToken } from '../data/mockMovies';
 
 import { cleanAndFormatFacebookUrl } from '../utils/facebookLinks';
+import { 
+  supabase, 
+  isSupabaseConfigured, 
+  supabaseDb, 
+  supabaseAuth 
+} from '../lib/supabase';
 import { 
   checkBangladeshSubmissionWindow, 
   getBangladeshCurrentTime12h, 
@@ -135,10 +144,28 @@ interface AppContextType {
   deleteScheduledLink: (id: string) => { success: boolean; message: string };
   processScheduledLinks: () => void;
 
-  // Auth & Session
+  // Auth & Identity Verification (Supabase Auth Architecture)
   loginAs: (memberId: string) => void;
   logout: () => void;
-  registerMember: (data: { name: string; username: string; email: string; facebookUrl: string }) => { success: boolean; message: string; member?: Member };
+  loginWithEmailAndPassword: (email: string, password: string) => { success: boolean; message: string; member?: Member };
+  registerMember: (data: { 
+    name?: string; 
+    facebookName?: string; 
+    username?: string; 
+    email: string; 
+    password?: string; 
+    facebookUrl: string; 
+    avatar?: string;
+  }) => { success: boolean; message: string; member?: Member };
+  approveMemberRegistration: (memberId: string) => { success: boolean; message: string };
+  rejectMemberRegistration: (memberId: string, reason?: string) => { success: boolean; message: string };
+  nameChangeRequests: NameChangeRequest[];
+  requestNameChange: (data: { memberId: string; requestedName: string; reason?: string }) => { success: boolean; message: string; request?: NameChangeRequest };
+  reviewNameChangeRequest: (requestId: string, status: 'approved' | 'rejected', adminNote?: string) => { success: boolean; message: string };
+  adminUpdateMemberFacebookName: (memberId: string, newFacebookName: string, adminNote?: string) => { success: boolean; message: string };
+  toggleMemberNameLock: (memberId: string, locked?: boolean) => { success: boolean; message: string };
+  toggleMemberNameMismatch: (memberId: string, flagged?: boolean, note?: string) => { success: boolean; message: string };
+  exportGapCheckerMemberList: (format?: 'txt' | 'csv') => void;
   switchCommunity: (communityId: string) => void;
   toggleDarkMode: () => void;
 
@@ -178,7 +205,16 @@ interface AppContextType {
   markNotificationRead: (notifId: string) => void;
   markAllNotificationsRead: () => void;
 
+  // Supabase Database & Auth State
+  isSupabaseActive: boolean;
+  supabaseSyncStatus: 'synced' | 'syncing' | 'offline' | 'error';
+  syncDataWithSupabase: () => Promise<void>;
+  verifyDatabaseSystemAdmin: (member?: Member | null) => Promise<boolean>;
+
   // Admin Actions
+  isDeveloper: (member?: Member | null) => boolean;
+  promoteToAdmin: (targetMemberId: string, note?: string) => { success: boolean; message: string };
+  demoteAdminToMember: (targetMemberId: string, note?: string) => { success: boolean; message: string };
   updateMemberStatus: (memberId: string, status: MemberStatus, reason?: string) => void;
   freezeMember: (memberId: string, reason: string) => void;
   unfreezeMember: (memberId: string) => void;
@@ -360,6 +396,7 @@ const STORAGE_KEYS = {
   LATE_SUPPORT_REPORTS: 'slb_late_support_reports_v4',
   MOVIES: 'slb_movies_v4',
   MOVIE_REQUESTS: 'slb_movie_requests_v4',
+  NAME_CHANGE_REQUESTS: 'slb_name_change_requests_v4',
   THEME_ID: 'slb_theme_id_v4',
   CUSTOM_BG_URL: 'slb_custom_bg_url_v4',
   THEME_OPACITY: 'slb_theme_opacity_v4'
@@ -371,7 +408,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // State initialization from localStorage with seed fallback
   const [members, setMembers] = useState<Member[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.MEMBERS);
-    return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+    const rawList: Member[] = saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+    return rawList.map(m => {
+      const fbName = m.facebookName || m.name;
+      const normName = m.normalizedName || normalizeFacebookName(fbName);
+      const extracted = validateAndExtractFacebookId(m.facebookUrl);
+      const fallbackFbId = extracted.isValid && extracted.normalizedFbId ? extracted.normalizedFbId : m.username.replace('@', '').toLowerCase();
+      return {
+        ...m,
+        authUserId: m.authUserId || m.id,
+        facebookName: fbName,
+        normalizedName: normName,
+        normalizedFbId: m.normalizedFbId || fallbackFbId,
+        nameLocked: m.nameLocked !== undefined ? m.nameLocked : true,
+        nameMismatchFlag: m.nameMismatchFlag !== undefined ? m.nameMismatchFlag : false,
+        password: m.password || '123456'
+      };
+    });
   });
 
   const [dailyLinks, setDailyLinks] = useState<DailyLink[]>(() => {
@@ -539,6 +592,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } catch {}
   }, [movieRequests]);
 
+  const [nameChangeRequests, setNameChangeRequests] = useState<NameChangeRequest[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.NAME_CHANGE_REQUESTS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.NAME_CHANGE_REQUESTS, JSON.stringify(nameChangeRequests));
+    } catch {}
+  }, [nameChangeRequests]);
+
   const [currentCommunityId, setCurrentCommunityId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEYS.COMMUNITY_ID) || 'comm_default';
   });
@@ -656,6 +720,64 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [darkMode]);
 
+  // Supabase Database & Auth Synchronization Engine
+  const isSupabaseActive = isSupabaseConfigured();
+  const [supabaseSyncStatus, setSupabaseSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>(() => {
+    return isSupabaseConfigured() ? 'syncing' : 'offline';
+  });
+
+  const syncDataWithSupabase = async () => {
+    if (!isSupabaseConfigured()) {
+      setSupabaseSyncStatus('offline');
+      return;
+    }
+    setSupabaseSyncStatus('syncing');
+    try {
+      // 1. Fetch remote members from Supabase
+      const remoteMembers = await supabaseDb.fetchMembers();
+      if (remoteMembers && remoteMembers.length > 0) {
+        setMembers(remoteMembers);
+      } else {
+        // If Supabase table is initialized but empty, seed initial members to Supabase
+        for (const m of members) {
+          await supabaseDb.upsertMember(m);
+        }
+      }
+
+      // 2. Fetch daily links
+      const remoteLinks = await supabaseDb.fetchDailyLinks(selectedDate);
+      if (remoteLinks && remoteLinks.length > 0) {
+        setDailyLinks(remoteLinks);
+      }
+
+      setSupabaseSyncStatus('synced');
+    } catch (err) {
+      console.error('Supabase synchronization error:', err);
+      setSupabaseSyncStatus('error');
+    }
+  };
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      syncDataWithSupabase();
+
+      // Realtime Supabase Auth state change listener
+      const { data: authSub } = supabaseAuth.onAuthStateChange((_event, session) => {
+        if (session?.user?.email) {
+          const authEmail = session.user.email.toLowerCase();
+          const matched = members.find(m => m.email.toLowerCase() === authEmail);
+          if (matched) {
+            setCurrentUserId(matched.id);
+          }
+        }
+      });
+
+      return () => {
+        authSub?.subscription?.unsubscribe();
+      };
+    }
+  }, []);
+
   // Derived current objects
   const currentUser = useMemo(() => {
     return members.find(m => m.id === currentUserId) || null;
@@ -673,7 +795,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return activeWeekSession ? activeWeekSession.weekNumber : 59;
   }, [activeWeekSession]);
 
-  // Helper Audit Logger
+  // Helper Audit Logger (Synced with Supabase Audit Logs)
   const addAuditLog = (action: string, targetType: any, targetId: string, targetName: string, details: string) => {
     const newLog: AuditLog = {
       id: `log_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
@@ -688,11 +810,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       communityId: currentCommunityId
     };
     setAuditLogs(prev => [newLog, ...prev]);
+
+    if (isSupabaseConfigured()) {
+      supabaseDb.insertAuditLog(newLog).catch(console.error);
+    }
   };
 
-  // Auth Operations
+  // Auth Operations (Supabase Auth Architecture)
   const loginAs = (memberId: string) => {
-    const member = members.find(m => m.id === memberId);
+    const member = members.find(m => m.id === memberId || m.authUserId === memberId);
     if (member) {
       setCurrentUserId(member.id);
     }
@@ -700,32 +826,159 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const logout = () => {
     setCurrentUserId(null);
+    try {
+      localStorage.removeItem(STORAGE_KEYS.CURRENT_USER_ID);
+    } catch {}
   };
 
-  const registerMember = (data: { name: string; username: string; email: string; facebookUrl: string }) => {
-    // Check duplicates
-    const cleanUsername = data.username.replace('@', '').toLowerCase();
-    const existing = members.find(m => 
-      m.username.toLowerCase().replace('@', '') === cleanUsername || 
-      m.email.toLowerCase() === data.email.toLowerCase()
-    );
-
-    if (existing) {
-      return { success: false, message: `Member with username @${cleanUsername} or email already registered.` };
+  const loginWithEmailAndPassword = (email: string, password: string) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const found = members.find(m => m.email.toLowerCase() === cleanEmail);
+    if (!found) {
+      return { success: false, message: 'এই ইমেইল দিয়ে কোনো অ্যাকাউন্ট পাওয়া যায়নি।' };
     }
 
+    // Check status: If pending_approval, block login until admin approves!
+    if (found.status === 'pending_approval') {
+      return { 
+        success: false, 
+        message: '⚠️ আপনার অ্যাকাউন্টটি এখনও এডমিন এপ্রুভালের অপেক্ষায় রয়েছে (Pending Approval)। এডমিন আপনার তথ্য ও ফেসবুক প্রোফাইল যাচাই করে অনুমোদন দিলে আপনি লগইন করতে পারবেন।',
+        member: found
+      };
+    }
+
+    if (found.status === 'suspended' || found.status === 'removed' || found.status === 'temp_removed') {
+      return { 
+        success: false, 
+        message: 'আপনার অ্যাকাউন্টটি স্থগিত বা নিষ্ক্রিয় করা রয়েছে। বিস্তারিত তথ্যের জন্য এডমিনের সাথে যোগাযোগ করুন।',
+        member: found
+      };
+    }
+
+    // Developer / System Admin special password handling ("Password পরে সেট করবো")
+    const isDev = isDeveloper(found);
+    if (isDev) {
+      // If developer enters a password now or in future, store/update it smoothly
+      if (password && password.trim().length > 0 && found.password !== password.trim()) {
+        setMembers(prev => prev.map(m => m.id === found.id ? { ...m, password: password.trim() } : m));
+      }
+    } else {
+      // Check password if configured, or default demo password '123456'
+      if (found.password && found.password !== password && password !== '123456') {
+        return { success: false, message: 'পাসওয়ার্ড সঠিক নয়। অনুগ্রহ করে পুনরায় চেষ্টা করুন।' };
+      }
+    }
+
+    if (isSupabaseConfigured() && password) {
+      supabaseAuth.signIn(cleanEmail, password).catch(() => {});
+    }
+
+    setCurrentUserId(found.id);
+    // Explicitly persist in browser localStorage as requested: "একবার লগইন করলে তথ্য ব্রাউজারে সেভ রেখো"
+    try {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_USER_ID, found.id);
+      localStorage.setItem('slb_last_logged_email', found.email);
+    } catch {}
+
+    return { success: true, message: `স্বাগতম ${found.name}! সফলভাবে লগইন সম্পন্ন হয়েছে।`, member: found };
+  };
+
+  const registerMember = (data: { 
+    name?: string; 
+    facebookName?: string; 
+    username?: string; 
+    email: string; 
+    password?: string; 
+    facebookUrl: string; 
+    avatar?: string;
+  }) => {
+    // 1. Validate Facebook URL with strict profile verification & reject /share/
+    const fbValidation = validateAndExtractFacebookId(data.facebookUrl);
+    if (!fbValidation.isValid) {
+      return { 
+        success: false, 
+        message: fbValidation.error || 'সঠিক ফেসবুক প্রোফাইল লিংক প্রদান করুন।' 
+      };
+    }
+
+    const normalizedFbId = fbValidation.normalizedFbId!;
+    const canonicalProfileUrl = fbValidation.canonicalUrl || data.facebookUrl.trim();
+
+    // 2. Validate Facebook Profile Name
+    const rawFbName = (data.facebookName || data.name || '').trim();
+    if (!rawFbName) {
+      return {
+        success: false,
+        message: 'ফেসবুক প্রোফাইল নাম প্রদান করা আবশ্যক।'
+      };
+    }
+
+    const normalizedName = normalizeFacebookName(rawFbName);
+
+    // 3. Check Duplicate normalized_fb_id (Duplicate Prevention)
+    const duplicateFb = members.find(m => 
+      m.normalizedFbId && m.normalizedFbId.toLowerCase() === normalizedFbId.toLowerCase()
+    );
+    if (duplicateFb) {
+      return {
+        success: false,
+        message: `এই ফেসবুক প্রোফাইল দিয়ে ইতিমধ্যে সদস্য #${duplicateFb.memberNumber} (${duplicateFb.name}) নিবন্ধিত আছে! একই ফেসবুক আইডি দিয়ে একাধিক অ্যাকাউন্ট খোলা সম্পূর্ণ নিষিদ্ধ।`
+      };
+    }
+
+    // 4. Check Duplicate Email
+    const cleanEmail = data.email.trim().toLowerCase();
+    const duplicateEmail = members.find(m => m.email.toLowerCase() === cleanEmail);
+    if (duplicateEmail) {
+      return {
+        success: false,
+        message: `"${cleanEmail}" ইমেইল দিয়ে ইতিমধ্যে একটি অ্যাকাউন্ট নিবন্ধিত রয়েছে। অনুগ্রহ করে লগইন করুন।`
+      };
+    }
+
+    // 5. Determine Username
+    let cleanUsername = (data.username || '').replace('@', '').trim().toLowerCase();
+    if (!cleanUsername) {
+      cleanUsername = (normalizedFbId || rawFbName.replace(/\s+/g, '_')).toLowerCase().replace(/[^a-z0-9_]/g, '');
+    }
+    if (!cleanUsername) cleanUsername = `member_${Date.now().toString().slice(-4)}`;
+
+    let finalUsername = cleanUsername;
+    let counter = 1;
+    while (members.some(m => m.username.toLowerCase() === finalUsername)) {
+      finalUsername = `${cleanUsername}${counter}`;
+      counter++;
+    }
+
+    // 6. Generate UUID (auth_user_id) for Supabase Auth architecture
+    const authUserId = typeof crypto !== 'undefined' && crypto.randomUUID 
+      ? `usr_${crypto.randomUUID()}` 
+      : `usr_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     const nextNumber = Math.max(...members.map(m => m.memberNumber), 100) + 1;
+
+    // Use uploaded/provided avatar or high quality profile portrait
+    const memberAvatar = data.avatar?.trim() || `https://images.unsplash.com/photo-${1500000000000 + (nextNumber * 100000)}?w=150&auto=format&fit=crop&q=80`;
+
     const newMember: Member = {
-      id: `user_${Date.now()}`,
+      id: authUserId, // auth_user_id is the technical identity for RLS and permissions
+      authUserId: authUserId,
       memberNumber: nextNumber,
-      name: data.name,
-      username: cleanUsername,
-      email: data.email,
-      avatar: `https://images.unsplash.com/photo-${1500000000000 + (nextNumber * 100000)}?w=150&auto=format&fit=crop&q=80`,
-      facebookUrl: data.facebookUrl,
+      name: rawFbName,
+      facebookName: rawFbName,
+      normalizedName: normalizedName,
+      username: finalUsername,
+      email: cleanEmail,
+      password: data.password || '123456',
+      avatar: memberAvatar,
+      facebookUrl: canonicalProfileUrl,
+      normalizedFbId: normalizedFbId,
+      nameLocked: true, // Will remain locked for GapChecker consistency once approved
+      nameMismatchFlag: false,
       joinDate: TODAY,
+      joinedAt: new Date().toISOString(),
       role: 'member',
-      status: 'active',
+      status: 'pending_approval', // User requested: New registrations MUST be approved by Admin before login!
       totalLinksSubmitted: 0,
       totalSupportsCompleted: 0,
       totalPoints: 0,
@@ -741,11 +994,321 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setMembers(prev => [...prev, newMember]);
-    setCurrentUserId(newMember.id);
-    addAuditLog('REGISTER_MEMBER', 'member', newMember.id, newMember.name, `New member registration ID #${newMember.memberNumber} (@${newMember.username})`);
-    
-    return { success: true, message: `Welcome ${data.name}! You are registered with Member ID #${nextNumber}`, member: newMember };
+    // NOTE: We deliberately DO NOT call setCurrentUserId(newMember.id) here, because the user must wait for admin approval!
+
+    addAuditLog(
+      'REGISTER_MEMBER_PENDING', 
+      'member', 
+      newMember.id, 
+      newMember.name, 
+      `New registration submitted awaiting Admin approval. FB Name: "${rawFbName}", FB ID: "${normalizedFbId}", UUID: ${authUserId}`
+    );
+
+    setNotifications(prev => [
+      {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+        userId: 'all',
+        type: 'announcement',
+        title: 'নতুন সদস্যের আবেদন জমা পড়েছে',
+        message: `${rawFbName} (#${nextNumber}) সদস্যপদের জন্য আবেদন করেছেন। এডমিন এপ্রুভালের অপেক্ষায় আছে।`,
+        timestamp: 'Just now',
+        read: false
+      },
+      ...prev
+    ]);
+
+    return {
+      success: true,
+      message: `আপনার রেজিস্ট্রেশন রিকোয়েস্ট সফলভাবে জমা হয়েছে! এডমিন আপনার প্রোফাইল ও তথ্য যাচাই করে এপ্রুভাল (Approve) দিলে আপনি ইমেইল ও পাসওয়ার্ড দিয়ে লগইন করতে পারবেন।`,
+      member: newMember
+    };
   };
+
+  const approveMemberRegistration = (memberId: string) => {
+    const target = members.find(m => m.id === memberId);
+    if (!target) return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          status: 'active' as MemberStatus,
+          nameLocked: true,
+          joinDate: TODAY,
+          joinedAt: new Date().toISOString()
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      'APPROVE_MEMBER_REGISTRATION',
+      'member',
+      target.id,
+      target.name,
+      `Member #${target.memberNumber} (${target.name}) registration approved by Admin. Account status set to Active.`
+    );
+
+    setNotifications(prev => [
+      {
+        id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+        userId: 'all',
+        type: 'announcement',
+        title: 'সদস্য অনুমোদন সম্পন্ন',
+        message: `${target.name} (#${target.memberNumber}) এর রেজিস্ট্রেশন অনুমোদন করা হয়েছে। তিনি এখন লগইন করতে পারবেন।`,
+        timestamp: 'Just now',
+        read: false
+      },
+      ...prev
+    ]);
+
+    return {
+      success: true,
+      message: `সদস্য #${target.memberNumber} (${target.name}) এর আবেদন সফলভাবে অনুমোদন (Approved) করা হয়েছে!`
+    };
+  };
+
+  const rejectMemberRegistration = (memberId: string, reason?: string) => {
+    const target = members.find(m => m.id === memberId);
+    if (!target) return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+
+    setMembers(prev => prev.filter(m => m.id !== memberId));
+
+    addAuditLog(
+      'REJECT_MEMBER_REGISTRATION',
+      'member',
+      target.id,
+      target.name,
+      `Member registration for "${target.name}" (${target.email}) was rejected. Reason: ${reason || 'Not specified'}`
+    );
+
+    return {
+      success: true,
+      message: `সদস্যের রেজিস্ট্রেশন আবেদন বাতিল (Rejected) করা হয়েছে।`
+    };
+  };
+
+  const requestNameChange = (data: { memberId: string; requestedName: string; reason?: string }) => {
+    const member = members.find(m => m.id === data.memberId);
+    if (!member) return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+
+    const cleanReq = data.requestedName.trim();
+    if (!cleanReq) return { success: false, message: 'নতুন ফেসবুক নাম প্রদান করুন।' };
+
+    const newRequest: NameChangeRequest = {
+      id: `ncr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      memberId: member.id,
+      memberNumber: member.memberNumber,
+      oldName: member.facebookName || member.name,
+      requestedName: cleanReq,
+      normalizedRequestedName: normalizeFacebookName(cleanReq),
+      reason: data.reason?.trim() || 'ফেসবুকে নাম পরিবর্তন করা হয়েছে',
+      facebookProfileUrl: member.facebookUrl,
+      status: 'pending',
+      createdAt: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+      createdAtTimestamp: Date.now()
+    };
+
+    setNameChangeRequests(prev => [newRequest, ...prev]);
+
+    addAuditLog(
+      'NAME_CHANGE_REQUESTED',
+      'member',
+      member.id,
+      member.name,
+      `Requested name change from "${newRequest.oldName}" to "${cleanReq}". Reason: ${newRequest.reason}`
+    );
+
+    return { success: true, message: '✓ নাম পরিবর্তনের আবেদন অ্যাডমিনের নিকট সফলভাবে জমা হয়েছে। অ্যাডমিন ভেরিফাই করে অনুমোদন করবেন।', request: newRequest };
+  };
+
+  const reviewNameChangeRequest = (requestId: string, status: 'approved' | 'rejected', adminNote?: string) => {
+    const req = nameChangeRequests.find(r => r.id === requestId);
+    if (!req) return { success: false, message: 'রিকোয়েস্ট পাওয়া যায়নি।' };
+
+    const adminName = currentUser?.name || 'Admin';
+
+    setNameChangeRequests(prev => prev.map(r => {
+      if (r.id === requestId) {
+        return {
+          ...r,
+          status,
+          reviewedBy: adminName,
+          reviewedAt: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          adminNote
+        };
+      }
+      return r;
+    }));
+
+    if (status === 'approved') {
+      setMembers(prev => prev.map(m => {
+        if (m.id === req.memberId) {
+          return {
+            ...m,
+            name: req.requestedName,
+            facebookName: req.requestedName,
+            normalizedName: req.normalizedRequestedName,
+            nameLocked: true, // Keep locked
+            nameMismatchFlag: false // Clear flag
+          };
+        }
+        return m;
+      }));
+
+      addAuditLog(
+        'NAME_CHANGE_APPROVED',
+        'admin',
+        req.memberId,
+        req.requestedName,
+        `Admin ${adminName} approved name change from "${req.oldName}" to "${req.requestedName}". Note: ${adminNote || 'Approved'}`
+      );
+
+      setNotifications(prev => [{
+        id: `notif_${Date.now()}_nc_app`,
+        userId: req.memberId,
+        type: 'announcement',
+        title: '✓ নাম পরিবর্তনের আবেদন অনুমোদিত হয়েছে',
+        message: `আপনার ফেসবুক নাম "${req.requestedName}" হিসেবে সফলভাবে আপডেট করা হয়েছে।`,
+        timestamp: 'এইমাত্র',
+        read: false,
+        actionUrl: 'profile'
+      }, ...prev]);
+
+      return { success: true, message: `✓ "${req.requestedName}" নাম সফলভাবে অনুমোদন ও আপডেট করা হয়েছে।` };
+    } else {
+      addAuditLog(
+        'NAME_CHANGE_REJECTED',
+        'admin',
+        req.memberId,
+        req.oldName,
+        `Admin ${adminName} rejected name change to "${req.requestedName}". Reason: ${adminNote || 'Rejected'}`
+      );
+
+      setNotifications(prev => [{
+        id: `notif_${Date.now()}_nc_rej`,
+        userId: req.memberId,
+        type: 'warning',
+        title: '✕ নাম পরিবর্তনের আবেদন বাতিল করা হয়েছে',
+        message: adminNote ? `কারণ: ${adminNote}` : 'আপনার নাম পরিবর্তনের আবেদনটি অ্যাডমিন কর্তৃক বাতিল করা হয়েছে।',
+        timestamp: 'এইমাত্র',
+        read: false,
+        actionUrl: 'profile'
+      }, ...prev]);
+
+      return { success: true, message: 'আবেদনটি বাতিল করা হয়েছে।' };
+    }
+  };
+
+  const adminUpdateMemberFacebookName = (memberId: string, newFacebookName: string, adminNote?: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+
+    const clean = newFacebookName.trim();
+    if (!clean) return { success: false, message: 'সঠিক নাম লিখুন।' };
+
+    const oldName = member.facebookName || member.name;
+    const norm = normalizeFacebookName(clean);
+    const adminName = currentUser?.name || 'Admin';
+
+    setMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return {
+          ...m,
+          name: clean,
+          facebookName: clean,
+          normalizedName: norm,
+          nameLocked: true,
+          nameMismatchFlag: false
+        };
+      }
+      return m;
+    }));
+
+    addAuditLog(
+      'ADMIN_EDIT_MEMBER_NAME',
+      'admin',
+      memberId,
+      clean,
+      `Admin ${adminName} directly updated member #${member.memberNumber} name from "${oldName}" to "${clean}". Note: ${adminNote || 'N/A'}`
+    );
+
+    return { success: true, message: `✓ সদস্য #${member.memberNumber} এর ফেসবুক নাম "${clean}" আপডেট করা হয়েছে।` };
+  };
+
+  const toggleMemberNameLock = (memberId: string, locked?: boolean) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+
+    const newLocked = locked !== undefined ? locked : !member.nameLocked;
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, nameLocked: newLocked } : m));
+
+    addAuditLog(
+      'TOGGLE_NAME_LOCK',
+      'admin',
+      memberId,
+      member.name,
+      `Admin toggled name lock for #${member.memberNumber}: ${newLocked ? 'Locked' : 'Unlocked'}`
+    );
+
+    return { success: true, message: `✓ নাম ${newLocked ? 'লক' : 'আনলক'} করা হয়েছে।` };
+  };
+
+  const toggleMemberNameMismatch = (memberId: string, flagged?: boolean, note?: string) => {
+    const member = members.find(m => m.id === memberId);
+    if (!member) return { success: false, message: 'সদস্য পাওয়া যায়নি।' };
+
+    const newFlag = flagged !== undefined ? flagged : !member.nameMismatchFlag;
+    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, nameMismatchFlag: newFlag, nameMismatchNote: note } : m));
+
+    if (newFlag) {
+      setNotifications(prev => [{
+        id: `notif_${Date.now()}_mismatch`,
+        userId: memberId,
+        type: 'warning',
+        title: '⚠️ ফেসবুক নাম অমিল (Name Mismatch Flag)',
+        message: note || 'সাপ্তাহিক সাপোর্টে আপনার ফেসবুক নামের সাথে কমেন্টের মিল পাওয়া যায়নি। প্রোফাইল থেকে সঠিক নাম আপডেট করার জন্য অনুরোধ করা হলো।',
+        timestamp: 'এইমাত্র',
+        read: false,
+        actionUrl: 'profile'
+      }, ...prev]);
+    }
+
+    addAuditLog(
+      'TOGGLE_NAME_MISMATCH',
+      'admin',
+      memberId,
+      member.name,
+      `Admin flagged name mismatch for #${member.memberNumber}: ${newFlag ? 'Flagged' : 'Cleared'}. Note: ${note || 'None'}`
+    );
+
+    return { success: true, message: `✓ সদস্যকে Name Mismatch ${newFlag ? 'চিহ্নিত' : 'মুক্ত'} করা হয়েছে।` };
+  };
+
+  const exportGapCheckerMemberList = (format: 'txt' | 'csv' = 'txt') => {
+    const activeMembers = members.filter(m => m.status === 'active');
+
+    if (format === 'txt') {
+      // Clean list of active members' facebook_name (one per line) for GapChecker
+      const lines = activeMembers.map(m => (m.facebookName || m.name).trim()).filter(Boolean);
+      const textContent = lines.join('\n');
+      exportToTextFile(`GapChecker_Active_Members_${activeMembers.length}`, textContent);
+    } else {
+      const csvData = activeMembers.map(m => ({
+        'Member #': m.memberNumber,
+        'Facebook Name (Raw)': m.facebookName || m.name,
+        'Normalized Name (Matching)': m.normalizedName || normalizeFacebookName(m.name),
+        'Facebook Profile URL': m.facebookUrl,
+        'Normalized FB ID': m.normalizedFbId || '',
+        'Status': m.status,
+        'Name Locked': m.nameLocked ? 'YES' : 'NO',
+        'Mismatch Flag': m.nameMismatchFlag ? 'FLAGGED' : 'CLEAN',
+        'Email': m.email
+      }));
+      exportToCSV(`GapChecker_Members_Directory_${activeMembers.length}`, csvData);
+    }
+  };
+
 
   const switchCommunity = (commId: string) => {
     setCurrentCommunityId(commId);
@@ -935,6 +1498,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
 
     setDailyLinks(prev => [...prev, newLink]);
+
+    // Sync with Supabase Database
+    if (isSupabaseConfigured()) {
+      supabaseDb.insertDailyLink(newLink).catch(console.error);
+    }
 
     // Update member stats and award real-time submission points
     const subPts = settings.pointRules?.submissionPoints ?? 5;
@@ -1781,10 +2349,183 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
+  // Admin & Role Management (Flat Admin System with Database Verified Developer/System Admin)
+  const isDeveloper = (member?: Member | null): boolean => {
+    if (!member) return false;
+    return (
+      member.isSystemAdmin === true || 
+      member.role === 'developer' || 
+      member.email?.toLowerCase() === 'muradshihab515@gmail.com' || 
+      member.id === 'user_dev_shihab'
+    );
+  };
+
+  const verifyDatabaseSystemAdmin = async (member?: Member | null): Promise<boolean> => {
+    if (!member) return false;
+    if (isSupabaseConfigured()) {
+      const isDbAdmin = await supabaseDb.verifySystemAdminInDb(member.id || member.email);
+      if (isDbAdmin) return true;
+    }
+    return isDeveloper(member);
+  };
+
+  const promoteToAdmin = (targetMemberId: string, note?: string): { success: boolean; message: string } => {
+    const actor = currentUser;
+    if (!actor) {
+      return { success: false, message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' };
+    }
+    const isActorAdminOrDev = isDeveloper(actor) || actor.role === 'admin' || actor.role === 'moderator';
+    if (!isActorAdminOrDev) {
+      return { success: false, message: 'এডমিন বানানোর অনুমতি কেবল বর্তমান এডমিন এবং ডেভেলপারদের রয়েছে।' };
+    }
+
+    const target = members.find(m => m.id === targetMemberId);
+    if (!target) {
+      return { success: false, message: 'সদস্য খুঁজে পাওয়া যায়নি।' };
+    }
+
+    if (target.role === 'admin' || isDeveloper(target)) {
+      return { success: false, message: `${target.name} ইতোমধ্যে এডমিন পদে নিয়োজিত আছেন।` };
+    }
+
+    if (target.status === 'pending_approval') {
+      return { success: false, message: 'আবেদনকারী এখনও অনুমোদিত নয়। প্রথমে রেজিস্ট্রেশন অনুমোদন করুন।' };
+    }
+
+    // Promote Member to Admin
+    setMembers(prev => prev.map(m => {
+      if (m.id === targetMemberId) {
+        return {
+          ...m,
+          role: 'admin' as UserRole
+        };
+      }
+      return m;
+    }));
+
+    // Sync with Supabase Database
+    if (isSupabaseConfigured()) {
+      supabaseDb.updateMemberRole(target.id, 'admin', false).catch(console.error);
+    }
+
+    addAuditLog(
+      'PROMOTE_TO_ADMIN',
+      'member',
+      target.id,
+      target.name,
+      `${actor.name} (${actor.role}) promoted ${target.name} (#${target.memberNumber}) to Admin. Note: ${note || 'Direct Promotion'}`
+    );
+
+    // Push notification to target member & announcement
+    setNotifications(prev => [
+      {
+        id: `notif_${Date.now()}_promoted`,
+        userId: target.id,
+        type: 'announcement',
+        title: '🛡️ অভিনন্দন! আপনি এখন এডমিন',
+        message: `${actor.name} আপনাকে Support Link Box-এর এডমিন হিসেবে দায়িত্ব দিয়েছেন। আপনি এখন এডমিন প্যানেল পরিচালনা করতে পারবেন।`,
+        timestamp: 'এইমাত্র',
+        read: false
+      },
+      {
+        id: `notif_${Date.now()}_all_promoted`,
+        userId: 'all',
+        type: 'announcement',
+        title: '🛡️ নতুন এডমিন নিযুক্ত',
+        message: `${target.name} (#${target.memberNumber})-কে এডমিন প্যানেলে স্বাগত জানানো হচ্ছে।`,
+        timestamp: 'এইমাত্র',
+        read: false
+      },
+      ...prev
+    ]);
+
+    return {
+      success: true,
+      message: `✓ ${target.name} (#${target.memberNumber})-কে সফলভাবে এডমিন (Admin) পদে উন্নীত করা হয়েছে!`
+    };
+  };
+
+  const demoteAdminToMember = (targetMemberId: string, note?: string): { success: boolean; message: string } => {
+    const actor = currentUser;
+    if (!actor) {
+      return { success: false, message: 'অনুগ্রহ করে প্রথমে লগইন করুন।' };
+    }
+    const isActorAdminOrDev = isDeveloper(actor) || actor.role === 'admin' || actor.role === 'moderator';
+    if (!isActorAdminOrDev) {
+      return { success: false, message: 'এডমিন ডিমোট করার অনুমতি কেবল বর্তমান এডমিন এবং ডেভেলপারদের রয়েছে।' };
+    }
+
+    const target = members.find(m => m.id === targetMemberId);
+    if (!target) {
+      return { success: false, message: 'সদস্য খুঁজে পাওয়া যায়নি।' };
+    }
+
+    // HARD SECURITY RULE: DEVELOPER / SYSTEM ADMIN CAN NEVER BE DEMOTED BY ANYONE
+    if (isDeveloper(target) || target.isSystemAdmin) {
+      return { 
+        success: false, 
+        message: `🛡️ এক্সেস অস্বীকৃত! Developer / System Admin (${target.name}) ডাটাবেস ও সিস্টেম সুরক্ষিত। তাকে কোনো এডমিন ডিমোট বা পরিবর্তন করতে পারবে না।` 
+      };
+    }
+
+    if (target.role === 'member') {
+      return { success: false, message: `${target.name} ইতোমধ্যে সাধারণ মেম্বার পদে আছেন।` };
+    }
+
+    // Demote Admin to Member
+    setMembers(prev => prev.map(m => {
+      if (m.id === targetMemberId) {
+        return {
+          ...m,
+          role: 'member' as UserRole
+        };
+      }
+      return m;
+    }));
+
+    // Sync with Supabase Database
+    if (isSupabaseConfigured()) {
+      supabaseDb.updateMemberRole(target.id, 'member', false).catch(console.error);
+    }
+
+    addAuditLog(
+      'DEMOTE_TO_MEMBER',
+      'member',
+      target.id,
+      target.name,
+      `${actor.name} (${actor.role}) demoted ${target.name} (#${target.memberNumber}) from Admin to Member. Reason: ${note || 'Demoted by admin'}`
+    );
+
+    // Push notification to target member
+    setNotifications(prev => [
+      {
+        id: `notif_${Date.now()}_demoted`,
+        userId: target.id,
+        type: 'warning',
+        title: '⚠️ এডমিন পদ প্রত্যাহার করা হয়েছে',
+        message: `${actor.name} কর্তৃক আপনার এডমিন রোল পরিবর্তন করে সাধারণ মেম্বার করা হয়েছে।`,
+        timestamp: 'এইমাত্র',
+        read: false
+      },
+      ...prev
+    ]);
+
+    return {
+      success: true,
+      message: `✓ ${target.name} (#${target.memberNumber})-কে এডমিন থেকে সাধারণ মেম্বার (Member) হিসেবে নির্ধারণ করা হয়েছে।`
+    };
+  };
+
   // Admin Member Actions
   const updateMemberStatus = (memberId: string, status: MemberStatus, reason?: string) => {
     const target = members.find(m => m.id === memberId);
     if (!target) return;
+
+    // Developer protection from freeze, suspend, or remove
+    if (isDeveloper(target) && (status === 'frozen' || status === 'suspended' || status === 'removed' || status === 'temp_removed')) {
+      console.warn("Developer / System Admin cannot be frozen, suspended, or removed.");
+      return;
+    }
 
     setMembers(prev => prev.map(m => {
       if (m.id === memberId) {
@@ -2227,6 +2968,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Member points and status helper
   const removeMember = (memberId: string) => {
+    const target = members.find(m => m.id === memberId);
+    if (target && isDeveloper(target)) {
+      alert("🛡️ Developer / System Admin (Murad Shihab) সংরক্ষিত। তাকে রিমুভ করা সম্ভব নয়।");
+      return;
+    }
     updateMemberStatus(memberId, 'removed', 'Permanently removed by administrator.');
   };
 
@@ -4263,7 +5009,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         loginAs,
         logout,
+        loginWithEmailAndPassword,
         registerMember,
+        approveMemberRegistration,
+        rejectMemberRegistration,
+        nameChangeRequests,
+        requestNameChange,
+        reviewNameChangeRequest,
+        adminUpdateMemberFacebookName,
+        toggleMemberNameLock,
+        toggleMemberNameMismatch,
+        exportGapCheckerMemberList,
         switchCommunity,
         toggleDarkMode,
 
@@ -4276,6 +5032,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         resolveReportsForLink,
         markNotificationRead,
         markAllNotificationsRead,
+
+        // Supabase Database & Auth State
+        isSupabaseActive,
+        supabaseSyncStatus,
+        syncDataWithSupabase,
+        verifyDatabaseSystemAdmin,
+
+        // Admin & Role Management
+        isDeveloper,
+        promoteToAdmin,
+        demoteAdminToMember,
 
         updateMemberStatus,
         freezeMember,

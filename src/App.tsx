@@ -14,16 +14,17 @@ import { LinkSubmissionModal } from './components/member/LinkSubmissionModal';
 import { ReportModal } from './components/member/ReportModal';
 import { ReportConversationModal } from './components/member/ReportConversationModal';
 import { AuthModal } from './components/auth/AuthModal';
+import { LoginPage } from './components/auth/LoginPage';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const getInitialView = (): string => {
   try {
     const hash = window.location.hash.replace('#', '');
-    if (hash && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin'].includes(hash)) {
+    if (hash && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin', 'login'].includes(hash)) {
       return hash;
     }
     const saved = localStorage.getItem('slb_current_view');
-    if (saved && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin'].includes(saved)) {
+    if (saved && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin', 'login'].includes(saved)) {
       return saved;
     }
   } catch {}
@@ -143,6 +144,13 @@ const AppContent: React.FC = () => {
       case 'admin':
         return (
           <AdminLayout />
+        );
+      case 'login':
+        return (
+          <LoginPage 
+            onLoginSuccess={() => setCurrentView('daily_links')} 
+            onNavigate={(v) => setCurrentView(v)} 
+          />
         );
       default:
         return (

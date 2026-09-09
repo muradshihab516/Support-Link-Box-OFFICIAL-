@@ -1,7 +1,7 @@
-export type UserRole = 'member' | 'admin' | 'super_admin' | 'moderator' | 'finance_admin';
+export type UserRole = 'member' | 'admin' | 'super_admin' | 'moderator' | 'finance_admin' | 'developer';
 export type MemberRole = UserRole;
 
-export type MemberStatus = 'active' | 'inactive' | 'frozen' | 'suspended' | 'removed' | 'temp_removed';
+export type MemberStatus = 'active' | 'inactive' | 'frozen' | 'suspended' | 'removed' | 'temp_removed' | 'pending_approval';
 
 export type DailySupportStatusType = 'completed' | 'partially_completed' | 'failed' | 'excused';
 
@@ -33,16 +33,25 @@ export interface Badge {
 }
 
 export interface Member {
-  id: string;
+  id: string; // Technical UUID (auth_user_id)
+  authUserId?: string; // Explicit technical identity alias
   memberNumber: number; // e.g. 102
-  name: string;
+  name: string; // Display name
+  facebookName?: string; // Exact Facebook profile name with emojis/stylish letters
+  normalizedName?: string; // Lowercase, stripped punctuation/spaces for fuzzy GapChecker matching
   username: string; // e.g. @emon123
   email: string;
+  password?: string; // For Email+Password authentication
   avatar: string;
-  facebookUrl: string;
+  facebookUrl: string; // Canonical profile URL
+  normalizedFbId?: string; // Unique normalized Facebook ID (numeric ID or username) for duplicate prevention
+  nameLocked?: boolean; // When true, member cannot edit facebookName directly
+  nameMismatchFlag?: boolean; // Flagged when name doesn't match comments in GapChecker
+  nameMismatchNote?: string; // Reason or comment for name mismatch flag
   joinDate: string;
   joinedAt?: string;
   role: UserRole;
+  isSystemAdmin?: boolean; // Database-verified System Admin / Developer (Supabase is_system_admin column)
   status: MemberStatus;
   totalLinksSubmitted: number;
   linksSubmitted?: number;
@@ -616,5 +625,23 @@ export interface ThemePreset {
   badgeText: string;
   tagline: string;
   gradientFallback?: string;
+}
+
+// Member Facebook Name Change Requests
+export interface NameChangeRequest {
+  id: string;
+  memberId: string;
+  memberNumber: number;
+  oldName: string;
+  requestedName: string;
+  normalizedRequestedName: string;
+  reason?: string;
+  facebookProfileUrl: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  createdAt: string;
+  createdAtTimestamp: number;
+  reviewedAt?: string;
+  adminNote?: string;
 }
 

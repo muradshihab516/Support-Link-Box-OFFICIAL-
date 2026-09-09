@@ -16,11 +16,13 @@ import {
   Gavel,
   Database,
   Clock,
-  Film
+  Film,
+  ShieldCheck
 } from 'lucide-react';
 
 export type AdminTab = 
   | 'overview'
+  | 'admin_roles'
   | 'upload_movie'
   | 'members'
   | 'bulk_import'
@@ -54,6 +56,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
       title: 'Operations',
       items: [
         { id: 'overview', label: 'Admin Overview', icon: LayoutDashboard },
+        { id: 'admin_roles', label: 'Admins & Roles (এডমিন ও রোল)', icon: ShieldCheck },
         { id: 'upload_movie', label: 'Upload Movie (মুভি আপলোড)', icon: Film },
         { id: 'members', label: 'Members Directory', icon: Users },
         { id: 'bulk_import', label: 'Bulk Import', icon: UserPlus },

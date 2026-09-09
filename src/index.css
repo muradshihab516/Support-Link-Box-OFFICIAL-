@@ -35,3 +35,92 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #3F3F46;
 }
+
+/* 3D Neon Light Glow & Pulse */
+@keyframes neon-flicker-glow {
+  0%, 100% {
+    text-shadow:
+      0 0 5px #e0f2fe,
+      0 0 12px #38bdf8,
+      0 0 25px #0284c7,
+      0 0 45px #0369a1,
+      0 0 70px #0284c7,
+      0 2px 4px rgba(0, 0, 0, 0.9),
+      0 4px 10px rgba(0, 0, 0, 0.7);
+    filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.65));
+  }
+  50% {
+    text-shadow:
+      0 0 4px #e0f2fe,
+      0 0 9px #38bdf8,
+      0 0 18px #0ea5e9,
+      0 0 35px #0369a1,
+      0 0 55px #0284c7,
+      0 2px 4px rgba(0, 0, 0, 0.9),
+      0 4px 10px rgba(0, 0, 0, 0.7);
+    filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.45));
+  }
+}
+
+/* 3D Wing Flap Left & Right */
+@keyframes neon-wing-flap-left {
+  0% {
+    transform: rotateY(0deg) skewY(0deg);
+  }
+  100% {
+    transform: rotateY(68deg) skewY(-5deg);
+  }
+}
+
+@keyframes neon-wing-flap-right {
+  0% {
+    transform: rotateY(0deg) skewY(0deg);
+  }
+  100% {
+    transform: rotateY(-68deg) skewY(5deg);
+  }
+}
+
+/* Butterfly gentle flight & hover float */
+@keyframes neon-butterfly-flight {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(1);
+  }
+  33% {
+    transform: translate(8px, -12px) rotate(4deg) scale(1.02);
+  }
+  66% {
+    transform: translate(-6px, -18px) rotate(-3deg) scale(0.98);
+  }
+  100% {
+    transform: translate(4px, -6px) rotate(2deg) scale(1.01);
+  }
+}
+
+@keyframes neon-butterfly-flight-alt {
+  0% {
+    transform: translate(0px, 0px) rotate(0deg) scale(0.95);
+  }
+  40% {
+    transform: translate(-10px, -14px) rotate(-5deg) scale(1);
+  }
+  75% {
+    transform: translate(12px, -8px) rotate(3deg) scale(0.97);
+  }
+  100% {
+    transform: translate(-4px, -18px) rotate(-2deg) scale(1);
+  }
+}
+
+.neon-title-3d {
+  animation: neon-flicker-glow 3.5s ease-in-out infinite;
+  letter-spacing: 0.04em;
+}
+
+.neon-box-glow {
+  box-shadow: 
+    0 0 20px rgba(56, 189, 248, 0.3),
+    inset 0 0 15px rgba(56, 189, 248, 0.1),
+    0 0 35px rgba(99, 102, 241, 0.2);
+}
+

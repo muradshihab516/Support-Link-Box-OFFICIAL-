@@ -153,15 +153,17 @@ const AVATARS = [
 
 export const INITIAL_MEMBERS: Member[] = [
   {
-    id: 'user_super_admin',
+    id: 'user_dev_shihab',
     memberNumber: 100,
-    name: 'Murad Shihab',
-    username: 'murad_superadmin',
-    email: 'muradshihab516@gmail.com',
+    name: 'Md Shihab Khan',
+    facebookName: 'Md Shihab Khan',
+    username: 'shihab_khan',
+    email: 'Muradshihab515@gmail.com',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-    facebookUrl: 'https://facebook.com/murad.shihab.official',
+    facebookUrl: 'https://www.facebook.com/SmShihab2.0',
     joinDate: '2025-01-10',
-    role: 'super_admin',
+    role: 'developer',
+    isSystemAdmin: true,
     status: 'active',
     totalLinksSubmitted: 220,
     totalSupportsCompleted: 3450,
@@ -175,7 +177,7 @@ export const INITIAL_MEMBERS: Member[] = [
     lastActiveDate: '2026-08-28',
     badges: ['badge_champ', 'badge_streak', 'badge_elite', 'badge_perfect'],
     communityId: 'comm_default',
-    notes: 'Platform Founder & Chief Administrator'
+    notes: 'Platform Developer & System Administrator (Supabase Verified)'
   },
   {
     id: 'user_admin_mamun',
@@ -810,6 +812,35 @@ for (let i = 124; i <= 145; i++) {
     communityId: 'comm_default'
   });
 }
+
+// Sample Pending Member awaiting Admin Approval
+INITIAL_MEMBERS.push({
+  id: 'user_pending_demo_1',
+  memberNumber: 146,
+  name: 'Sumaiya Akter',
+  facebookName: 'Sumaiya Akter',
+  normalizedName: 'sumaiyaakter',
+  normalizedFbId: 'sumaiya.akter.profile',
+  username: 'sumaiya_akter_146',
+  email: 'sumaiya.akter@gmail.com',
+  avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+  facebookUrl: 'https://www.facebook.com/sumaiya.akter.profile',
+  joinDate: '2026-08-28',
+  role: 'member',
+  status: 'pending_approval',
+  totalLinksSubmitted: 0,
+  totalSupportsCompleted: 0,
+  totalPoints: 0,
+  weeklyPoints: 0,
+  currentRank: 146,
+  currentStreak: 0,
+  longestStreak: 0,
+  warningCount: 0,
+  inactiveDays: 0,
+  lastActiveDate: '2026-08-28',
+  badges: [],
+  communityId: 'comm_default'
+});
 
 // Generate Today's Submitted Daily Links
 const TODAY = '2026-08-28';
