@@ -37,7 +37,12 @@ import {
   MovieRequestItem,
   MovieRequestStatus,
   ThemePreset,
-  NameChangeRequest
+  NameChangeRequest,
+  AnnouncementItem,
+  AnnouncementType,
+  AllDoneRecord,
+  AltIdDisclosure,
+  PointActivityTransaction
 } from '../types';
 import { THEME_PRESETS, DEFAULT_THEME_ID } from '../data/themePresets';
 import { normalizeFacebookName, validateAndExtractFacebookId } from '../utils/facebookIdentity';
@@ -64,7 +69,11 @@ import {
   INITIAL_AD_DAILY_ROLLUPS,
   INITIAL_DATA_CLEANUP_LOGS,
   INITIAL_REWARD_REDEMPTIONS,
-  INITIAL_LATE_SUPPORT_REPORTS
+  INITIAL_LATE_SUPPORT_REPORTS,
+  INITIAL_ANNOUNCEMENTS,
+  INITIAL_ALL_DONE,
+  INITIAL_ALT_ID_DISCLOSURES,
+  INITIAL_POINT_TRANSACTIONS
 } from '../data/seedData';
 import { INITIAL_MOVIES, INITIAL_MOVIE_REQUESTS, generateRandomToken } from '../data/mockMovies';
 
@@ -78,6 +87,8 @@ import {
 import { 
   checkBangladeshSubmissionWindow, 
   getBangladeshCurrentTime12h, 
+  getBangladeshTimeInfo,
+  formatTimeTo12Hour,
   checkLateSupportPunishment, 
   LateSupportStatus,
   checkBangladeshLateReportEligibility,
@@ -362,6 +373,56 @@ interface AppContextType {
     fulfilledMovieId?: string
   ) => { success: boolean; message: string };
   deleteMovieRequest: (requestId: string) => { success: boolean; message: string };
+
+  // 📢 Announcements Module
+  announcements: AnnouncementItem[];
+  createAnnouncement: (data: {
+    title: string;
+    message: string;
+    type?: AnnouncementType;
+    imageUrl?: string;
+    isImportant?: boolean;
+    isPinned?: boolean;
+    status?: 'published' | 'draft' | 'scheduled';
+    scheduledAt?: string;
+  }) => { success: boolean; message: string; announcement?: AnnouncementItem };
+  updateAnnouncement: (id: string, updates: Partial<AnnouncementItem>) => { success: boolean; message: string };
+  deleteAnnouncement: (id: string) => { success: boolean; message: string };
+  markAnnouncementAsRead: (id: string, memberId?: string) => void;
+  togglePinAnnouncement: (id: string) => { success: boolean; message: string; isPinned: boolean };
+
+  // ✅ All Done Module
+  allDoneRecords: AllDoneRecord[];
+  altIdDisclosures: AltIdDisclosure[];
+  pointTransactions: PointActivityTransaction[];
+  getAllDoneForDate: (date?: string) => AllDoneRecord[];
+  isMemberAllDoneToday: (memberId: string, date?: string) => boolean;
+  getTodayFastestSupporters: (date?: string) => AllDoneRecord[];
+  checkAllDoneEligibility: (memberId: string) => {
+    canSubmit: boolean;
+    isWindowOpen: boolean;
+    pendingCount: number;
+    alreadySubmitted: boolean;
+    reason?: string;
+    windowStartTime: string;
+    currentBstTime: string;
+    minutesUntilOpen?: number;
+  };
+  submitAllDone: (data: {
+    memberId: string;
+    message?: string;
+    otherIds?: string;
+    otherIdLinks?: string;
+    bypassSupportCheckForTest?: boolean;
+    bypassTimeCheckForTest?: boolean;
+  }) => {
+    success: boolean;
+    message: string;
+    record?: AllDoneRecord;
+    isTop5?: boolean;
+    rank?: number | null;
+    pointsAwarded?: number;
+  };
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -399,13 +460,39 @@ const STORAGE_KEYS = {
   NAME_CHANGE_REQUESTS: 'slb_name_change_requests_v4',
   THEME_ID: 'slb_theme_id_v4',
   CUSTOM_BG_URL: 'slb_custom_bg_url_v4',
-  THEME_OPACITY: 'slb_theme_opacity_v4'
+  THEME_OPACITY: 'slb_theme_opacity_v4',
+  ANNOUNCEMENTS: 'slb_announcements_v1',
+  ALL_DONE: 'slb_all_done_v1',
+  ALT_ID_DISCLOSURES: 'slb_alt_id_disclosures_v1',
+  POINT_TRANSACTIONS: 'slb_point_transactions_v1'
+};
+
+// Global Helper: Identify Admin, Developer, Super Admin, System Admin, or Staff accounts
+export const isStaffOrAdminMember = (member?: Member | null): boolean => {
+  if (!member) return false;
+  return (
+    member.role === 'admin' ||
+    member.role === 'super_admin' ||
+    member.role === 'developer' ||
+    member.role === 'moderator' ||
+    member.role === 'finance_admin' ||
+    member.isSystemAdmin === true ||
+    member.id === 'user_dev_shihab' ||
+    member.email?.toLowerCase() === 'muradshihab515@gmail.com'
+  );
+};
+
+// Global Helper: Non-obligatory links (Admin, VIP, Notice). They do NOT trigger member support obligations.
+export const isNonObligatoryDailyLink = (link?: { category?: string; linkType?: string } | null): boolean => {
+  if (!link) return false;
+  const cat = (link.category || link.linkType || '').toLowerCase();
+  return cat === 'admin' || cat === 'vip' || cat === 'notice';
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const TODAY = '2026-08-28';
 
-  // State initialization from localStorage with seed fallback
+  // State initialization from localStorage with seed fallback & auto-healing
   const [members, setMembers] = useState<Member[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.MEMBERS);
     const rawList: Member[] = saved ? JSON.parse(saved) : INITIAL_MEMBERS;
@@ -414,6 +501,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const normName = m.normalizedName || normalizeFacebookName(fbName);
       const extracted = validateAndExtractFacebookId(m.facebookUrl);
       const fallbackFbId = extracted.isValid && extracted.normalizedFbId ? extracted.normalizedFbId : m.username.replace('@', '').toLowerCase();
+      const isStaff = isStaffOrAdminMember(m);
       return {
         ...m,
         authUserId: m.authUserId || m.id,
@@ -422,7 +510,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         normalizedFbId: m.normalizedFbId || fallbackFbId,
         nameLocked: m.nameLocked !== undefined ? m.nameLocked : true,
         nameMismatchFlag: m.nameMismatchFlag !== undefined ? m.nameMismatchFlag : false,
-        password: m.password || '123456'
+        password: m.password || '123456',
+        // Auto-heal: Staff & Admins can NEVER be temp_removed or suspended due to member support penalties
+        status: (isStaff && (m.status === 'temp_removed' || (m.status === 'suspended' && m.penaltyStatus === 'suspended'))) ? 'active' : m.status,
+        penaltyStatus: isStaff ? 'none' : m.penaltyStatus,
+        requiredAdsCount: isStaff ? 0 : m.requiredAdsCount,
+        watchedAdsCount: isStaff ? 0 : m.watchedAdsCount,
+        suspendedAt: isStaff ? undefined : m.suspendedAt
       };
     });
   });
@@ -518,7 +612,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const [latePenalties, setLatePenalties] = useState<LatePenaltyRecord[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.LATE_PENALTIES);
-    return saved ? JSON.parse(saved) : INITIAL_LATE_PENALTIES;
+    const rawList: LatePenaltyRecord[] = saved ? JSON.parse(saved) : INITIAL_LATE_PENALTIES;
+    return rawList.filter(p => {
+      const pMember = INITIAL_MEMBERS.find(m => m.id === p.memberId);
+      return !pMember || !isStaffOrAdminMember(pMember);
+    });
   });
 
   const [pointsHistory, setPointsHistory] = useState<PointsHistoryRecord[]>(() => {
@@ -602,6 +700,70 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       localStorage.setItem(STORAGE_KEYS.NAME_CHANGE_REQUESTS, JSON.stringify(nameChangeRequests));
     } catch {}
   }, [nameChangeRequests]);
+
+  // Announcements state
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.ANNOUNCEMENTS);
+      return saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS;
+    } catch {
+      return INITIAL_ANNOUNCEMENTS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ANNOUNCEMENTS, JSON.stringify(announcements));
+    } catch {}
+  }, [announcements]);
+
+  // All Done state
+  const [allDoneRecords, setAllDoneRecords] = useState<AllDoneRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.ALL_DONE);
+      return saved ? JSON.parse(saved) : INITIAL_ALL_DONE;
+    } catch {
+      return INITIAL_ALL_DONE;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ALL_DONE, JSON.stringify(allDoneRecords));
+    } catch {}
+  }, [allDoneRecords]);
+
+  // Alt ID Disclosures state
+  const [altIdDisclosures, setAltIdDisclosures] = useState<AltIdDisclosure[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.ALT_ID_DISCLOSURES);
+      return saved ? JSON.parse(saved) : INITIAL_ALT_ID_DISCLOSURES;
+    } catch {
+      return INITIAL_ALT_ID_DISCLOSURES;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ALT_ID_DISCLOSURES, JSON.stringify(altIdDisclosures));
+    } catch {}
+  }, [altIdDisclosures]);
+
+  // Point Activity Transactions state
+  const [pointTransactions, setPointTransactions] = useState<PointActivityTransaction[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.POINT_TRANSACTIONS);
+      return saved ? JSON.parse(saved) : INITIAL_POINT_TRANSACTIONS;
+    } catch {
+      return INITIAL_POINT_TRANSACTIONS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.POINT_TRANSACTIONS, JSON.stringify(pointTransactions));
+    } catch {}
+  }, [pointTransactions]);
 
   const [currentCommunityId, setCurrentCommunityId] = useState<string>(() => {
     return localStorage.getItem(STORAGE_KEYS.COMMUNITY_ID) || 'comm_default';
@@ -2889,15 +3051,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const markReportRead = (reportId: string) => {
     if (!currentUser) return;
-    setReports(prev => prev.map(r => {
-      if (r.id === reportId && r.unreadBy && r.unreadBy.includes(currentUser.id)) {
-        return {
-          ...r,
-          unreadBy: r.unreadBy.filter(uid => uid !== currentUser.id)
-        };
-      }
-      return r;
-    }));
+    setReports(prev => {
+      const needsUpdate = prev.some(r => r.id === reportId && r.unreadBy && r.unreadBy.includes(currentUser.id));
+      if (!needsUpdate) return prev;
+      return prev.map(r => {
+        if (r.id === reportId && r.unreadBy && r.unreadBy.includes(currentUser.id)) {
+          return {
+            ...r,
+            unreadBy: r.unreadBy.filter(uid => uid !== currentUser.id)
+          };
+        }
+        return r;
+      });
+    });
   };
 
   const resolveReport = (reportId: string, statusOrNotes?: string, maybeNotes?: string) => {
@@ -3043,13 +3209,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     deleteSponsor(id);
   };
 
-  const trackSponsorImpression = (sponsorId: string) => {
+  const trackSponsorImpression = React.useCallback((sponsorId: string) => {
     setSponsors(prev => prev.map(s => s.id === sponsorId ? { ...s, impressions: s.impressions + 1 } : s));
-  };
+  }, []);
 
-  const trackSponsorClick = (sponsorId: string) => {
+  const trackSponsorClick = React.useCallback((sponsorId: string) => {
     setSponsors(prev => prev.map(s => s.id === sponsorId ? { ...s, clicks: s.clicks + 1 } : s));
-  };
+  }, []);
 
   const addRevenueRecord = (data: Omit<RevenueRecord, 'id'>) => {
     const newRev: RevenueRecord = {
@@ -3162,6 +3328,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setSponsors(INITIAL_SPONSORS);
     setAffiliates(INITIAL_AFFILIATES);
     setNotices(INITIAL_NOTICES);
+    setAnnouncements(INITIAL_ANNOUNCEMENTS);
+    setAllDoneRecords(INITIAL_ALL_DONE);
+    setAltIdDisclosures(INITIAL_ALT_ID_DISCLOSURES);
+    setPointTransactions(INITIAL_POINT_TRANSACTIONS);
     setReports(INITIAL_REPORTS);
     setAuditLogs(INITIAL_AUDIT_LOGS);
     setNotifications(INITIAL_NOTIFICATIONS);
@@ -3174,43 +3344,89 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Helper Computations
   const getTodaySupportStats = (memberId: string) => {
+    const member = members.find(m => m.id === memberId);
+    const isStaff = isStaffOrAdminMember(member);
+
     const todayLinks = dailyLinks.filter(l => l.date === TODAY && l.communityId === currentCommunityId);
     const submittedLink = todayLinks.find(l => l.memberId === memberId) || null;
     const hasSubmittedToday = Boolean(submittedLink);
 
-    // Eligible peer links (exclude user's own link)
-    const eligibleLinks = todayLinks.filter(l => l.memberId !== memberId);
-    const requiredCount = eligibleLinks.length;
+    // Filter all mandatory peer links:
+    // 1. Must NOT be the member's own link
+    // 2. Must NOT be admin / vip / notice links
+    const eligibleMemberLinks = todayLinks.filter(l => 
+      l.memberId !== memberId && 
+      !isNonObligatoryDailyLink(l)
+    );
 
     // Supported records by this member today
-    const memberSupportsToday = supportRecords.filter(r => r.supporterMemberId === memberId && r.date === TODAY && r.communityId === currentCommunityId);
+    const memberSupportsToday = supportRecords.filter(r => 
+      r.supporterMemberId === memberId && 
+      r.date === TODAY && 
+      r.communityId === currentCommunityId
+    );
     const supportedLinkIds = new Set(memberSupportsToday.map(r => r.dailyLinkId));
 
     let completedCount = 0;
-    eligibleLinks.forEach(l => {
+    eligibleMemberLinks.forEach(l => {
       if (supportedLinkIds.has(l.id)) completedCount++;
     });
 
+    // RULE 1: Admin & Developer accounts have ZERO support requirement and ZERO pending support
+    if (isStaff) {
+      return {
+        hasSubmittedToday,
+        submittedLink,
+        requiredCount: 0,
+        completedCount: memberSupportsToday.length, // Show voluntary supports
+        pendingCount: 0,
+        progressPercentage: 100,
+        status: 'completed' as const,
+        isExempt: true,
+        supportedLinkIds
+      };
+    }
+
+    // RULE 2: Member who did NOT submit a link today has ZERO support obligation!
+    // "Member Link Submission = Support Obligation Trigger"
+    // Also if member submitted an Admin / VIP / Notice link, no mandatory support required
+    if (!hasSubmittedToday || (submittedLink && isNonObligatoryDailyLink(submittedLink))) {
+      return {
+        hasSubmittedToday,
+        submittedLink,
+        requiredCount: 0,
+        completedCount,
+        pendingCount: 0,
+        progressPercentage: 100,
+        status: 'excused' as const,
+        isExempt: false,
+        supportedLinkIds
+      };
+    }
+
+    // RULE 3: Member submitted a regular member link today -> MUST support eligible member links!
+    const requiredCount = eligibleMemberLinks.length;
     const pendingCount = Math.max(0, requiredCount - completedCount);
     const progressPercentage = requiredCount > 0 ? Math.round((completedCount / requiredCount) * 100) : 100;
 
     let status: 'completed' | 'partially_completed' | 'pending' | 'excused' = 'pending';
-    if (!hasSubmittedToday) {
-      status = 'pending';
-    } else if (completedCount >= requiredCount && requiredCount > 0) {
+    if (pendingCount === 0) {
       status = 'completed';
     } else if (completedCount > 0) {
       status = 'partially_completed';
+    } else {
+      status = 'pending';
     }
 
     return {
-      hasSubmittedToday,
+      hasSubmittedToday: true,
       submittedLink,
       requiredCount,
       completedCount,
       pendingCount,
       progressPercentage,
       status,
+      isExempt: false,
       supportedLinkIds
     };
   };
@@ -3328,13 +3544,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const newPenalties: LatePenaltyRecord[] = [...latePenalties];
     const newMembers = members.map(member => {
-      // Exclude super admins / admins from punishment
-      if (member.role === 'super_admin' || member.role === 'admin') {
+      // 1. ABSOLUTE EXCLUSION: Staff & Admins (Admin, Developer, Super Admin, System Admin, Moderator, Finance Admin)
+      if (isStaffOrAdminMember(member)) {
+        // Auto-heal if previously corrupted
+        if (member.status === 'temp_removed' || (member.status === 'suspended' && member.penaltyStatus === 'suspended')) {
+          return {
+            ...member,
+            status: 'active' as MemberStatus,
+            penaltyStatus: 'none' as const,
+            requiredAdsCount: 0,
+            watchedAdsCount: 0,
+            suspendedAt: undefined
+          };
+        }
         return member;
       }
 
       checkedCount++;
       const todayStats = getTodaySupportStats(member.id);
+
+      // 2. CRITICAL RULE: Member link submission is the ONLY support obligation trigger!
+      // If member did NOT submit a link today, or has 0 requiredCount -> ZERO OBLIGATION!
+      if (!todayStats.hasSubmittedToday || todayStats.requiredCount === 0) {
+        // Auto-heal if previously corrupted
+        if (member.status === 'temp_removed' || (member.status === 'suspended' && member.penaltyStatus === 'suspended')) {
+          return {
+            ...member,
+            status: 'active' as MemberStatus,
+            penaltyStatus: 'none' as const,
+            requiredAdsCount: 0,
+            watchedAdsCount: 0,
+            suspendedAt: undefined
+          };
+        }
+        return member;
+      }
+
       const hasPendingSupport = todayStats.pendingCount > 0;
 
       // EXCEPTION LAYER: Check if member has an active Late Support Report
@@ -3458,10 +3703,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return member;
     });
 
-    if (tempRemovedCount > 0 || suspendedCount > 0) {
-      setMembers(newMembers);
-      setLatePenalties(newPenalties);
+    // Clean up any penalties that belong to staff/admin or members who didn't submit a link today
+    const validPenalties = newPenalties.filter(p => {
+      const pMember = members.find(m => m.id === p.memberId);
+      if (!pMember) return false;
+      if (isStaffOrAdminMember(pMember)) return false;
+      const mStats = getTodaySupportStats(pMember.id);
+      if (!mStats.hasSubmittedToday || mStats.requiredCount === 0) return false;
+      return true;
+    });
 
+    const membersChanged = JSON.stringify(newMembers) !== JSON.stringify(members);
+    const penaltiesChanged = JSON.stringify(validPenalties) !== JSON.stringify(latePenalties);
+
+    if (membersChanged) {
+      setMembers(newMembers);
+    }
+    if (penaltiesChanged) {
+      setLatePenalties(validPenalties);
+    }
+
+    if (tempRemovedCount > 0 || suspendedCount > 0) {
       addAuditLog(
         'AUTO_ADMIN_PUNISHMENT_RUN',
         'system',
@@ -4549,7 +4811,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Check and award all done & fastest supporter rank
   const checkMemberAllDoneStatus = (memberId: string) => {
     const todayLinks = dailyLinks.filter(l => l.date === TODAY && l.communityId === currentCommunityId);
-    const peerLinks = todayLinks.filter(l => l.memberId !== memberId);
+    const peerLinks = todayLinks.filter(l => l.memberId !== memberId && !isNonObligatoryDailyLink(l));
     if (peerLinks.length === 0) return;
 
     const memberSupportsToday = supportRecords.filter(r => r.supporterMemberId === memberId && r.date === TODAY);
@@ -4955,6 +5217,469 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   };
 
+  // =========================================================================
+  // 📢 ANNOUNCEMENT SECTION METHODS
+  // =========================================================================
+  const createAnnouncement = (data: {
+    title: string;
+    message: string;
+    type?: AnnouncementType;
+    imageUrl?: string;
+    isImportant?: boolean;
+    isPinned?: boolean;
+    status?: 'published' | 'draft' | 'scheduled';
+    scheduledAt?: string;
+  }) => {
+    if (!currentUser || !isStaffOrAdminMember(currentUser)) {
+      return { success: false, message: 'শুধুমাত্র অ্যাডমিন ও ডেভেলপাররা অ্যানাউন্সমেন্ট তৈরি করতে পারেন।' };
+    }
+
+    if (!data.title?.trim() || !data.message?.trim()) {
+      return { success: false, message: 'শিরোনাম এবং বিস্তারিত বার্তা দেওয়া বাধ্যতামূলক।' };
+    }
+
+    const bdInfo = getBangladeshTimeInfo();
+    const curTime12 = formatTimeTo12Hour(bdInfo.time24);
+    const newId = `ann_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    const newAnnouncement: AnnouncementItem = {
+      id: newId,
+      title: data.title.trim(),
+      message: data.message.trim(),
+      type: data.type || 'general',
+      issuedBy: currentUser.name,
+      issuedByRole: currentUser.role === 'developer' ? 'Developer' : currentUser.role === 'super_admin' ? 'Super Admin' : 'Admin',
+      issuedByAvatar: currentUser.avatar,
+      publishedAt: new Date().toISOString(),
+      date: bdInfo.dateIso,
+      timeBst: `${curTime12} BST`,
+      imageUrl: data.imageUrl?.trim() || undefined,
+      isImportant: Boolean(data.isImportant),
+      isPinned: Boolean(data.isPinned),
+      status: data.status || 'published',
+      scheduledAt: data.scheduledAt,
+      readBy: [currentUser.id],
+      createdAt: new Date().toISOString(),
+      communityId: currentCommunityId
+    };
+
+    setAnnouncements(prev => [newAnnouncement, ...prev]);
+
+    // Sync to Supabase in background
+    if (isSupabaseConfigured()) {
+      supabaseDb.insertAnnouncement(newAnnouncement).catch(() => {});
+    }
+
+    // Add Audit Log
+    addAuditLog(
+      'Announcement Created',
+      'announcement',
+      newId,
+      newAnnouncement.title,
+      `Type: ${newAnnouncement.type}, Pinned: ${newAnnouncement.isPinned ? 'Yes' : 'No'}`
+    );
+
+    return {
+      success: true,
+      message: 'নতুন অ্যানাউন্সমেন্ট সফলভাবে প্রকাশিত হয়েছে।',
+      announcement: newAnnouncement
+    };
+  };
+
+  const updateAnnouncement = (id: string, updates: Partial<AnnouncementItem>) => {
+    if (!currentUser || !isStaffOrAdminMember(currentUser)) {
+      return { success: false, message: 'শুধুমাত্র অ্যাডমিনরা অ্যানাউন্সমেন্ট এডিট করতে পারেন।' };
+    }
+
+    let updatedItem: AnnouncementItem | null = null;
+    setAnnouncements(prev => prev.map(ann => {
+      if (ann.id === id) {
+        updatedItem = { ...ann, ...updates };
+        return updatedItem;
+      }
+      return ann;
+    }));
+
+    if (updatedItem && isSupabaseConfigured()) {
+      supabaseDb.insertAnnouncement(updatedItem).catch(() => {});
+    }
+
+    return { success: true, message: 'অ্যানাউন্সমেন্ট সফলভাবে আপডেট করা হয়েছে।' };
+  };
+
+  const deleteAnnouncement = (id: string) => {
+    if (!currentUser || !isStaffOrAdminMember(currentUser)) {
+      return { success: false, message: 'শুধুমাত্র অ্যাডমিনরা অ্যানাউন্সমেন্ট মুছতে পারেন।' };
+    }
+
+    setAnnouncements(prev => prev.filter(ann => ann.id !== id));
+
+    if (isSupabaseConfigured()) {
+      supabaseDb.deleteAnnouncement(id).catch(() => {});
+    }
+
+    addAuditLog('Announcement Deleted', 'announcement', id, 'Announcement', 'Deleted by admin');
+    return { success: true, message: 'অ্যানাউন্সমেন্ট সফলভাবে মুছে ফেলা হয়েছে।' };
+  };
+
+  const markAnnouncementAsRead = (id: string, memberId?: string) => {
+    const targetUserId = memberId || currentUserId;
+    if (!targetUserId) return;
+
+    setAnnouncements(prev => prev.map(ann => {
+      if (ann.id === id) {
+        const readSet = new Set(ann.readBy || []);
+        if (!readSet.has(targetUserId)) {
+          readSet.add(targetUserId);
+          const updated = { ...ann, readBy: Array.from(readSet) };
+          if (isSupabaseConfigured()) {
+            supabaseDb.insertAnnouncement(updated).catch(() => {});
+          }
+          return updated;
+        }
+      }
+      return ann;
+    }));
+  };
+
+  const togglePinAnnouncement = (id: string) => {
+    if (!currentUser || !isStaffOrAdminMember(currentUser)) {
+      return { success: false, message: 'অনুমতি নেই।', isPinned: false };
+    }
+
+    let isNowPinned = false;
+    setAnnouncements(prev => prev.map(ann => {
+      if (ann.id === id) {
+        isNowPinned = !ann.isPinned;
+        const updated = { ...ann, isPinned: isNowPinned };
+        if (isSupabaseConfigured()) {
+          supabaseDb.insertAnnouncement(updated).catch(() => {});
+        }
+        return updated;
+      }
+      return ann;
+    }));
+
+    return {
+      success: true,
+      message: isNowPinned ? 'অ্যানাউন্সমেন্ট পিন করা হয়েছে।' : 'পিন সরানো হয়েছে।',
+      isPinned: isNowPinned
+    };
+  };
+
+  // =========================================================================
+  // ✅ ALL DONE SECTION METHODS
+  // =========================================================================
+  const getAllDoneForDate = (date?: string): AllDoneRecord[] => {
+    const targetDate = date || TODAY;
+    return allDoneRecords
+      .filter(r => r.date === targetDate && r.communityId === currentCommunityId)
+      .sort((a, b) => a.submittedAtTimestamp - b.submittedAtTimestamp);
+  };
+
+  const isMemberAllDoneToday = (memberId: string, date?: string): boolean => {
+    const targetDate = date || TODAY;
+    return allDoneRecords.some(r => r.memberId === memberId && r.date === targetDate && r.communityId === currentCommunityId);
+  };
+
+  const getTodayFastestSupporters = (date?: string): AllDoneRecord[] => {
+    const records = getAllDoneForDate(date);
+    return records
+      .filter(r => typeof r.fastestRank === 'number' && r.fastestRank >= 1 && r.fastestRank <= 5)
+      .sort((a, b) => (a.fastestRank || 99) - (b.fastestRank || 99));
+  };
+
+  const checkAllDoneEligibility = (memberId: string) => {
+    const bdInfo = getBangladeshTimeInfo();
+    const curTime12 = formatTimeTo12Hour(bdInfo.time24);
+    const windowStart = settings.allDoneStartTime || '17:00'; // 5:00 PM BST
+    const [startH, startM] = windowStart.split(':').map(Number);
+    const currentTotalMinutes = bdInfo.hours * 60 + bdInfo.minutes;
+    const startTotalMinutes = startH * 60 + startM;
+
+    const isWindowOpen = currentTotalMinutes >= startTotalMinutes;
+    const minutesUntilOpen = Math.max(0, startTotalMinutes - currentTotalMinutes);
+
+    const alreadySubmitted = isMemberAllDoneToday(memberId, bdInfo.dateIso);
+    const supportStats = getTodaySupportStats(memberId);
+    const member = members.find(m => m.id === memberId);
+    const isStaff = isStaffOrAdminMember(member);
+
+    let canSubmit = false;
+    let reason: string | undefined;
+
+    if (alreadySubmitted) {
+      reason = 'আপনি আজ ইতোমধ্যে All Done সম্পন্ন করেছেন। আগামীকাল পুনরায় উইন্ডো খুলবে।';
+    } else if (!isWindowOpen) {
+      reason = `All Done উইন্ডো প্রতিদিন বিকেল ${formatTimeTo12Hour(windowStart)} BST-তে উন্মুক্ত হয়। বাকি আছে আর ${Math.floor(minutesUntilOpen / 60)} ঘণ্টা ${minutesUntilOpen % 60} মিনিট।`;
+    } else if (!isStaff && supportStats.pendingCount > 0) {
+      reason = `আপনার এখনো ${supportStats.pendingCount}টি সাপোর্ট বাকি আছে। সকল সাপোর্ট সম্পন্ন করে All Done জমা দিন।`;
+    } else {
+      canSubmit = true;
+    }
+
+    return {
+      canSubmit,
+      isWindowOpen,
+      pendingCount: isStaff ? 0 : supportStats.pendingCount,
+      alreadySubmitted,
+      reason,
+      windowStartTime: formatTimeTo12Hour(windowStart),
+      currentBstTime: `${curTime12} BST`,
+      minutesUntilOpen
+    };
+  };
+
+  const submitAllDone = (data: {
+    memberId: string;
+    message?: string;
+    otherIds?: string;
+    otherIdLinks?: string;
+    bypassSupportCheckForTest?: boolean;
+    bypassTimeCheckForTest?: boolean;
+  }) => {
+    const member = members.find(m => m.id === data.memberId);
+    if (!member) {
+      return { success: false, message: 'মেম্বার খুঁজে পাওয়া যায়নি।' };
+    }
+
+    const bdInfo = getBangladeshTimeInfo();
+    const targetDate = bdInfo.dateIso;
+    const curTime12 = formatTimeTo12Hour(bdInfo.time24);
+    const isStaff = isStaffOrAdminMember(member);
+
+    // 1. Strict Duplicate Check
+    const alreadyDone = allDoneRecords.some(
+      r => r.memberId === member.id && r.date === targetDate && r.communityId === currentCommunityId
+    );
+    if (alreadyDone) {
+      return { success: false, message: 'আপনি আজ ইতোমধ্যে All Done সাবমিট করেছেন।' };
+    }
+
+    // 2. Time Window Check (Asia/Dhaka)
+    const windowStart = settings.allDoneStartTime || '17:00';
+    const [startH, startM] = windowStart.split(':').map(Number);
+    const currentTotalMinutes = bdInfo.hours * 60 + bdInfo.minutes;
+    const startTotalMinutes = startH * 60 + startM;
+    if (currentTotalMinutes < startTotalMinutes && !data.bypassTimeCheckForTest) {
+      return {
+        success: false,
+        message: `All Done উইন্ডো এখনো উন্মুক্ত হয়নি। প্রতিদিন বিকেল ${formatTimeTo12Hour(windowStart)} BST-তে শুরু হয়।`
+      };
+    }
+
+    // 3. Support Obligation Check
+    const stats = getTodaySupportStats(member.id);
+    if (!isStaff && stats.pendingCount > 0 && !data.bypassSupportCheckForTest) {
+      return {
+        success: false,
+        message: `আপনার এখনো ${stats.pendingCount}টি বাধ্যতামূলক সাপোর্ট বাকি রয়েছে। সম্পূর্ণ করার পর জমা দিন।`
+      };
+    }
+
+    // 4. Calculate Server-side Rank & Points
+    const existingToday = allDoneRecords.filter(
+      r => r.date === targetDate && r.communityId === currentCommunityId
+    );
+    const rankPosition = existingToday.length + 1;
+    const isTop5 = rankPosition <= 5;
+    const fastestRank = isTop5 ? rankPosition : null;
+
+    // Bonus points schema [10, 8, 6, 4, 2]
+    const bonusTiers = settings.pointRules?.fastestSupporterTiers || [10, 8, 6, 4, 2];
+    const bonusPoints = isTop5 ? (bonusTiers[rankPosition - 1] || 0) : 0;
+    const basePoints = settings.pointRules?.allDonePoints || 3;
+    const totalPointsEarned = basePoints + bonusPoints;
+
+    const newRecordId = `ad_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const nowIso = new Date().toISOString();
+
+    const newRecord: AllDoneRecord = {
+      id: newRecordId,
+      memberId: member.id,
+      memberName: member.name,
+      memberNumber: member.memberNumber,
+      memberAvatar: member.avatar,
+      date: targetDate,
+      submittedAt: nowIso,
+      submittedAtTimestamp: Date.now(),
+      submittedTimeBst: `${curTime12} BST`,
+      message: data.message?.trim() || undefined,
+      otherIds: data.otherIds?.trim() || undefined,
+      otherIdLinks: data.otherIdLinks?.trim() || undefined,
+      fastestRank,
+      bonusPoints,
+      basePoints,
+      status: 'verified',
+      communityId: currentCommunityId
+    };
+
+    // Update state
+    setAllDoneRecords(prev => [...prev, newRecord]);
+
+    // Record Alt-ID disclosure if provided
+    if (data.otherIds?.trim() || data.otherIdLinks?.trim()) {
+      const newAltDisclosure: AltIdDisclosure = {
+        id: `alt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        allDoneId: newRecordId,
+        memberId: member.id,
+        memberName: member.name,
+        memberNumber: member.memberNumber,
+        date: targetDate,
+        altNames: data.otherIds?.trim() || 'Not specified',
+        altIdLinks: data.otherIdLinks?.trim() || 'Not specified',
+        createdAt: nowIso
+      };
+      setAltIdDisclosures(prev => [newAltDisclosure, ...prev]);
+      if (isSupabaseConfigured()) {
+        supabaseDb.insertAltIdDisclosure(newAltDisclosure).catch(() => {});
+      }
+    }
+
+    // Points Activity Transactions & Member Points Balance
+    const txBase: PointActivityTransaction = {
+      id: `pt_${Date.now()}_base`,
+      memberId: member.id,
+      activityType: 'ALL_DONE',
+      referenceId: newRecordId,
+      points: basePoints,
+      date: targetDate,
+      note: 'Daily All Done submission reward',
+      createdAt: nowIso
+    };
+    const newTransactions = [txBase];
+
+    if (bonusPoints > 0 && fastestRank) {
+      const rankSuffix = fastestRank === 1 ? '1st' : fastestRank === 2 ? '2nd' : fastestRank === 3 ? '3rd' : `${fastestRank}th`;
+      const txBonus: PointActivityTransaction = {
+        id: `pt_${Date.now()}_bonus`,
+        memberId: member.id,
+        activityType: 'FASTEST_SUPPORTER_BONUS',
+        referenceId: newRecordId,
+        points: bonusPoints,
+        date: targetDate,
+        note: `${rankSuffix} Fastest Supporter Champion Bonus`,
+        createdAt: nowIso
+      };
+      newTransactions.push(txBonus);
+    }
+
+    setPointTransactions(prev => [...newTransactions, ...prev]);
+
+    // Credit Points to Member
+    setMembers(prev => prev.map(m => {
+      if (m.id === member.id) {
+        return {
+          ...m,
+          totalPoints: (m.totalPoints || 0) + totalPointsEarned,
+          weeklyPoints: (m.weeklyPoints || 0) + totalPointsEarned
+        };
+      }
+      return m;
+    }));
+
+    // Sync to Supabase
+    if (isSupabaseConfigured()) {
+      supabaseDb.insertAllDone(newRecord).catch(() => {});
+    }
+
+    // Add Audit Log
+    addAuditLog(
+      'All Done Submitted',
+      'all_done',
+      newRecordId,
+      `${member.name} (#${member.memberNumber})`,
+      `Rank: ${fastestRank ? `#${fastestRank} Fastest` : 'Standard'}, Points: +${totalPointsEarned}`
+    );
+
+    // 5. Automatic Announcement Generation: Congratulate Top 5 Fastest Supporters in Announcement Section!
+    if (rankPosition <= 5) {
+      const top5SoFar = [...existingToday, newRecord].sort((a, b) => a.submittedAtTimestamp - b.submittedAtTimestamp).slice(0, 5);
+      
+      const topListFormatted = top5SoFar.map((r, idx) => {
+        const med = idx === 0 ? '🥇 ১ম (1st)' : idx === 1 ? '🥈 ২য় (2nd)' : idx === 2 ? '🥉 ৩য় (3rd)' : idx === 3 ? '4️⃣ ৪র্থ (4th)' : '5️⃣ ৫ম (5th)';
+        return `${med}: ${r.memberName} (#${r.memberNumber}) — +${r.bonusPoints} বোনাস পয়েন্ট (${r.submittedTimeBst})`;
+      }).join('\n');
+
+      const remainingSlots = 5 - top5SoFar.length;
+      const statusNote = remainingSlots > 0
+        ? `\n\n⚡ এখনও ${remainingSlots} জনের জন্য Fastest Supporter বোনাস পয়েন্ট পাওয়ার সুযোগ রয়েছে! বাকিরা দ্রুত সব সাপোর্ট শেষ করে All Done জমা দিন!`
+        : '\n\n🔥 আজকের শীর্ষ ৫ জন দ্রুততম সাপোর্টার পূর্ণ হয়েছে! সবাইকে আন্তরিক অভিনন্দন ও মোবারকবাদ!';
+
+      const annTitle = `🎉 Congratulations! আজকের Fastest Supporters (টপ ৫ দ্রুততম সাপোর্টার্স)`;
+      const annMessage = `বিকেল ৫:০০ টায় লিংক সাবমিশন শেষ হওয়ার পর আজকের সকল লিংকে দ্রুততম সময়ে সফলভাবে সাপোর্ট সম্পন্ন করায় অভিনন্দন!\n\n${topListFormatted}${statusNote}\n\nসবার একাউন্টে স্বয়ংক্রিয়ভাবে বোনাস পয়েন্ট ক্রেডিট করা হয়েছে।`;
+
+      const announcementId = `ann_fastest_${targetDate}`;
+
+      setAnnouncements(prev => {
+        const existingIdx = prev.findIndex(a => a.type === 'fastest_supporters' && a.date === targetDate);
+        if (existingIdx !== -1) {
+          const updated = [...prev];
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            title: annTitle,
+            message: annMessage,
+            publishedAt: nowIso,
+            timeBst: `${curTime12} BST`,
+            readBy: [member.id]
+          };
+          return updated;
+        } else {
+          const autoAnnouncement: AnnouncementItem = {
+            id: announcementId,
+            title: annTitle,
+            message: annMessage,
+            type: 'fastest_supporters',
+            issuedBy: 'Support Link Box System',
+            issuedByRole: 'System',
+            publishedAt: nowIso,
+            date: targetDate,
+            timeBst: `${curTime12} BST`,
+            isImportant: true,
+            isPinned: true,
+            status: 'published',
+            readBy: [member.id],
+            createdAt: nowIso,
+            communityId: currentCommunityId
+          };
+          return [autoAnnouncement, ...prev];
+        }
+      });
+
+      if (isSupabaseConfigured()) {
+        const autoAnnouncement: AnnouncementItem = {
+          id: announcementId,
+          title: annTitle,
+          message: annMessage,
+          type: 'fastest_supporters',
+          issuedBy: 'Support Link Box System',
+          issuedByRole: 'System',
+          publishedAt: nowIso,
+          date: targetDate,
+          timeBst: `${curTime12} BST`,
+          isImportant: true,
+          isPinned: true,
+          status: 'published',
+          readBy: [member.id],
+          createdAt: nowIso,
+          communityId: currentCommunityId
+        };
+        supabaseDb.insertAnnouncement(autoAnnouncement).catch(() => {});
+      }
+    }
+
+    return {
+      success: true,
+      message: isTop5 
+        ? `অভিনন্দন! আপনি ${fastestRank}ম স্থান অর্জন করেছেন এবং +${bonusPoints} বোনাসসহ মোট +${totalPointsEarned} পয়েন্ট পেয়েছেন! 🎉` 
+        : `আলহামদুলিল্লাহ! আপনার আজকের All Done সফলভাবে গৃহীত হয়েছে এবং +${totalPointsEarned} পয়েন্ট ক্রেডিট হয়েছে।`,
+      record: newRecord,
+      isTop5,
+      rank: fastestRank,
+      pointsAwarded: totalPointsEarned
+    };
+  };
+
   // Periodic Auto-Admin background pulse (every 60 seconds)
   useEffect(() => {
     const timer = setInterval(() => {
@@ -5151,7 +5876,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         submitMovieRequest,
         upvoteMovieRequest,
         updateMovieRequestStatus,
-        deleteMovieRequest
+        deleteMovieRequest,
+
+        // 📢 Announcements Module
+        announcements,
+        createAnnouncement,
+        updateAnnouncement,
+        deleteAnnouncement,
+        markAnnouncementAsRead,
+        togglePinAnnouncement,
+
+        // ✅ All Done Module
+        allDoneRecords,
+        altIdDisclosures,
+        pointTransactions,
+        getAllDoneForDate,
+        isMemberAllDoneToday,
+        getTodayFastestSupporters,
+        checkAllDoneEligibility,
+        submitAllDone
       }}
     >
       {children}

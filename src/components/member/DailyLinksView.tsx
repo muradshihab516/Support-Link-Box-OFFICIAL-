@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { DailyLink } from '../../types';
+import { DailyLink, LinkCategoryType } from '../../types';
 import { 
   Flame, 
   Search, 
@@ -47,6 +47,7 @@ import { cleanAndFormatFacebookUrl, getFacebookAppUrl, getFacebookWebBrowserUrl 
 import { LateAllDoneAdModal } from '../common/LateAllDoneAdModal';
 import { SuspendedMemberNotice } from './SuspendedMemberNotice';
 import { LateSupportReportModal } from './LateSupportReportModal';
+import { DailyAllDoneBox } from '../alldone/DailyAllDoneBox';
 
 interface DailyLinksViewProps {
   onNavigate?: (view: string) => void;
@@ -67,8 +68,6 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
     canMemberSubmitLateReportToday,
     getMemberActiveLateReport,
     getTodaySupportStats, 
-    markLinkSupported, 
-    unmarkLinkSupported,
     removeDailyLink,
     completeLateAllDone,
     darkMode,
@@ -83,6 +82,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
   const [editingLink, setEditingLink] = useState<DailyLink | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [submitCategory, setSubmitCategory] = useState<LinkCategoryType>('member');
   const [showScheduledModal, setShowScheduledModal] = useState(false);
   const [showPenaltyAdModal, setShowPenaltyAdModal] = useState(false);
   const [showLateReportModal, setShowLateReportModal] = useState(false);
@@ -217,39 +217,6 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       if (target) observer.unobserve(target);
     };
   }, [hasMore, eligibleLinks.length]);
-
-  // Instant Optimistic Support Handler (0ms UI lag)
-  const handleMarkSupport = (linkId: string) => {
-    // 1. Instant UI update in the current animation frame
-    setOptimisticStatus(prev => ({ ...prev, [linkId]: true }));
-
-    // Optional subtle haptic pulse for mobile touch confirmation
-    try {
-      if ('vibrate' in navigator) navigator.vibrate(25);
-    } catch {}
-
-    // Check if celebration trigger
-    const effectivePending = (stats?.pendingCount ?? 1) - 1;
-    if (effectivePending <= 0) {
-      confetti({
-        particleCount: 80,
-        spread: 80,
-        origin: { y: 0.6 }
-      });
-    }
-
-    // 2. Background async persistence without blocking the UI thread
-    setTimeout(() => {
-      markLinkSupported(linkId);
-    }, 0);
-  };
-
-  const handleUnmarkSupport = (linkId: string) => {
-    setOptimisticStatus(prev => ({ ...prev, [linkId]: false }));
-    setTimeout(() => {
-      unmarkLinkSupported(linkId);
-    }, 0);
-  };
 
   // Optimistic calculation for header tracker bar
   const optimisticPendingAdjustment = useMemo(() => {
@@ -568,6 +535,34 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
             )
           )}
 
+          {/* Admin Direct Submission Controls */}
+          {isAdmin && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                onClick={() => {
+                  setSubmitCategory('vip');
+                  setShowSubmitModal(true);
+                }}
+                className="px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all active:scale-95"
+                title="VIP লিংক সাবমিট করুন (সীমাহীন অ্যাক্সেস)"
+              >
+                <Crown className="w-3.5 h-3.5" />
+                <span>+ VIP লিংক</span>
+              </button>
+              <button
+                onClick={() => {
+                  setSubmitCategory('admin');
+                  setShowSubmitModal(true);
+                }}
+                className="px-3 py-2 bg-[#1C1C26] hover:bg-[#252533] border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
+                title="এডমিন লিংক সাবমিট করুন (সীমাহীন অ্যাক্সেস)"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                <span>+ এডমিন লিংক</span>
+              </button>
+            </div>
+          )}
+
           {currentUser && !stats?.hasSubmittedToday ? (
             currentUser.canSubmitLink === false ? (
               <div 
@@ -587,7 +582,10 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
               </div>
             ) : (
               <button
-                onClick={() => setShowSubmitModal(true)}
+                onClick={() => {
+                  setSubmitCategory('member');
+                  setShowSubmitModal(true);
+                }}
                 className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs sm:text-sm font-bold rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 transition-transform active:scale-95"
               >
                 <PlusCircle className="w-4 h-4" />
@@ -605,6 +603,12 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
 
       {/* Top Banner Sponsor */}
       <SponsoredBanner position="top_banner" />
+
+      {/* Daily All Done Interactive Box (Countdown / Ready to Submit / Already Submitted) */}
+      <DailyAllDoneBox
+        onNavigate={onNavigate}
+        onScrollToPending={() => setFilter('pending')}
+      />
 
       {/* Support Status Tracker Bar for Current User with Instant Optimistic Progress */}
       {currentUser && stats && (
@@ -1143,6 +1147,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       )}
 
       {/* Mid-content Display Ad */}
+      <DisplayAdSlot format="video_reward_card" slotId="links_reward_demo" />
       <DisplayAdSlot format="in_feed" />
 
       {/* In-App Post Viewer Modal */}
@@ -1168,6 +1173,7 @@ export const DailyLinksView: React.FC<DailyLinksViewProps> = ({ onNavigate, onSu
       {/* Submission Modal */}
       <LinkSubmissionModal
         isOpen={showSubmitModal}
+        initialCategory={submitCategory}
         onClose={() => setShowSubmitModal(false)}
       />
 

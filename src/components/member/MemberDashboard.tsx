@@ -29,7 +29,8 @@ import {
   Video,
   Crown,
   Bell,
-  Lock
+  Lock,
+  Megaphone
 } from 'lucide-react';
 import { getFacebookAppUrl, getFacebookWebBrowserUrl } from '../../utils/facebookLinks';
 import { LinkSubmissionModal } from './LinkSubmissionModal';
@@ -40,6 +41,7 @@ import { ReportModal } from './ReportModal';
 import { LateAllDoneAdModal } from '../common/LateAllDoneAdModal';
 import { SuspendedMemberNotice } from './SuspendedMemberNotice';
 import { LateSupportReportModal } from './LateSupportReportModal';
+import { isStaffOrAdminMember } from '../../context/AppContext';
 
 interface MemberDashboardProps {
   onNavigate: (view: string) => void;
@@ -60,10 +62,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
     updateDailyLinkUrl,
     resolveReportsForLink,
     getTodaySupportStats, 
-    markLinkSupported,
     badges,
     setActiveReportModalId,
-    completeLateAllDone
+    completeLateAllDone,
+    announcements,
+    isMemberAllDoneToday,
+    allDoneRecords
   } = useApp();
 
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -80,42 +84,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
   const [editMsg, setEditMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [previewScreenshotUrl, setPreviewScreenshotUrl] = useState<string | null>(null);
 
-  if (!currentUser) {
-    return (
-      <div className="max-w-md mx-auto my-12 p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mx-auto mb-3">
-          <Sparkles className="w-6 h-6" />
-        </div>
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Welcome to Support Link Box</h2>
-        <p className="text-xs text-slate-500 mt-1 mb-4">Please log in to manage your daily tasks, submit links, and view your progress.</p>
-        <button
-          onClick={() => onNavigate('landing')}
-          className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl"
-        >
-          View Public Page / Log In
-        </button>
-      </div>
-    );
-  }
-
-  const stats = getTodaySupportStats(currentUser.id);
-
-  // Active notices for this user
-  const userNotices = notices.filter(n => 
-    n.active && (n.targetMemberId === currentUser.id || n.targetMemberId === 'all')
-  );
-
   // User's own submitted link for today
-  const userTodayLink = dailyLinks.find(l => l.memberId === currentUser.id);
+  const userTodayLink = currentUser ? dailyLinks.find(l => l.memberId === currentUser.id) : undefined;
 
   // Reports submitted against currentUser's link today (open, pending, or in_discussion)
-  const myLinkReports = reports.filter(r => 
-    (r.targetMemberId === currentUser.id || (userTodayLink && r.targetLinkId === userTodayLink.id)) &&
-    (r.status === 'open' || r.status === 'pending' || r.status === 'in_discussion')
-  );
-
-  // Reports submitted by currentUser
-  const mySubmittedReports = reports.filter(r => r.reporterId === currentUser.id);
+  const myLinkReports = React.useMemo(() => {
+    if (!currentUser) return [];
+    return reports.filter(r => 
+      (r.targetMemberId === currentUser.id || (userTodayLink && r.targetLinkId === userTodayLink.id)) &&
+      (r.status === 'open' || r.status === 'pending' || r.status === 'in_discussion')
+    );
+  }, [reports, currentUser, userTodayLink]);
 
   // Summary breakdown of report reasons
   const reasonsSummary = React.useMemo(() => {
@@ -130,6 +109,42 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
     });
     return Object.entries(counts).map(([reason, count]) => `${count} × ${reason}`);
   }, [myLinkReports]);
+
+  if (!currentUser) {
+    return (
+      <div className="max-w-md mx-auto my-12 p-6 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mx-auto mb-3">
+          <Sparkles className="w-6 h-6" />
+        </div>
+        <h2 className="text-lg font-bold text-slate-900 dark:text-white">Welcome to Support Link Box</h2>
+        <p className="text-xs text-slate-500 mt-1 mb-4">Please log in to manage your daily tasks, submit links, and view your progress.</p>
+        <button
+          onClick={() => onNavigate('landing')}
+          className="px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl cursor-pointer"
+        >
+          View Public Page / Log In
+        </button>
+      </div>
+    );
+  }
+
+  const stats = getTodaySupportStats(currentUser.id);
+  const isStaff = isStaffOrAdminMember(currentUser);
+
+  // Active notices for this user
+  const userNotices = notices.filter(n => 
+    n.active && (n.targetMemberId === currentUser.id || n.targetMemberId === 'all')
+  );
+
+  // Notice board announcements
+  const unreadAnnouncementsCount = announcements.filter(a => !a.readBy?.includes(currentUser.id)).length;
+  const pinnedOrLatestNotice = announcements.find(a => a.isPinned) || announcements[0];
+  const isAllDone = isMemberAllDoneToday(currentUser.id);
+  const todayDateStr = new Date().toISOString().split('T')[0];
+  const userTodayAllDone = allDoneRecords.find(r => r.memberId === currentUser.id && r.date === todayDateStr);
+
+  // Reports submitted by currentUser
+  const mySubmittedReports = reports.filter(r => r.reporterId === currentUser.id);
 
   // Handle saving corrected post URL
   const handleSaveEditedUrl = (e: React.FormEvent) => {
@@ -238,13 +253,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
         </div>
       </div>
 
-      {/* Suspended Member Notice */}
-      {currentUser.status === 'suspended' && (
+      {/* Suspended Member Notice - Never shown to Staff/Admin or members without obligation */}
+      {!isStaff && currentUser.status === 'suspended' && (stats.hasSubmittedToday || stats.requiredCount > 0) && (
         <SuspendedMemberNotice />
       )}
 
-      {/* Temp Removed Notice & Late All Done Recovery Action */}
-      {currentUser.status === 'temp_removed' && (
+      {/* Temp Removed Notice & Late All Done Recovery Action - Never shown to Staff/Admin or members without obligation */}
+      {!isStaff && currentUser.status === 'temp_removed' && stats.hasSubmittedToday && (
         <div className="p-5 sm:p-6 rounded-2xl sm:rounded-3xl bg-gradient-to-r from-amber-950/60 via-[#1e150d] to-[#141210] border-2 border-amber-500/60 shadow-xl space-y-4 animate-in fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
@@ -650,26 +665,52 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
           <div className="space-y-4 max-w-xl flex-1">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">Today's Task</h2>
-                <p className="text-sm text-gray-400">Deadline: <span className="text-indigo-300 font-mono">11:59:59 PM BST</span></p>
+                <h2 className="text-xl font-bold text-white">
+                  {isStaff 
+                    ? "Admin Workspace" 
+                    : !stats.hasSubmittedToday 
+                    ? "দৈনিক সাপোর্ট (অপশনাল)" 
+                    : "Today's Task"}
+                </h2>
+                <p className="text-sm text-gray-400">
+                  {isStaff 
+                    ? "এডমিন/ডেভেলপারদের জন্য সাপোর্ট বাধ্যতামূলক নয়"
+                    : !stats.hasSubmittedToday
+                    ? "আজকে আপনি কোনো লিংক দেননি—সাপোর্ট বাধ্যতামূলক নয়"
+                    : <>Deadline: <span className="text-indigo-300 font-mono">11:59:59 PM BST</span></>}
+                </p>
               </div>
-              <span className="px-3 py-1 bg-indigo-500/20 text-indigo-400 text-xs rounded-full font-bold uppercase tracking-widest">
-                Required
+              <span className={`px-3 py-1 text-xs rounded-full font-bold uppercase tracking-wider ${
+                isStaff 
+                  ? "bg-amber-500/20 text-amber-300"
+                  : !stats.hasSubmittedToday
+                  ? "bg-emerald-500/20 text-emerald-300"
+                  : "bg-indigo-500/20 text-indigo-400 tracking-widest"
+              }`}>
+                {isStaff ? "Admin Exempt" : !stats.hasSubmittedToday ? "No Obligation" : "Required"}
               </span>
             </div>
 
             <div className="flex items-center gap-6">
               <div className="flex-1 h-3 bg-[#0A0A0B] rounded-full overflow-hidden border border-[#1E1E20]">
                 <div 
-                  className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.max(stats.progressPercentage, 4)}%` }}
+                  className={`h-full rounded-full transition-all duration-500 ${
+                    isStaff || !stats.hasSubmittedToday ? "bg-emerald-500" : "bg-indigo-500"
+                  }`}
+                  style={{ width: `${isStaff || !stats.hasSubmittedToday ? 100 : Math.max(stats.progressPercentage, 4)}%` }}
                 />
               </div>
               <div className="text-right shrink-0">
                 <span className="text-2xl font-bold text-white leading-none">
-                  {stats.completedCount} / {stats.requiredCount}
+                  {isStaff 
+                    ? `${stats.completedCount} (Voluntary)` 
+                    : !stats.hasSubmittedToday 
+                    ? "0 Required" 
+                    : `${stats.completedCount} / ${stats.requiredCount}`}
                 </span>
-                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-tighter">Supports Completed</p>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-tighter">
+                  {isStaff ? "Supports Done" : !stats.hasSubmittedToday ? "No Support Obligation" : "Supports Completed"}
+                </p>
               </div>
             </div>
 
@@ -680,10 +721,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
                 </div>
                 <div>
                   <p className="text-white font-semibold text-sm">
-                    {stats.pendingCount > 0 ? `${stats.pendingCount} Supports Remaining` : 'All Daily Supports Done!'}
+                    {isStaff
+                      ? "এডমিন অ্যাকাউন্ট: কোনো পেনাল্টি প্রযোজ্য নয়"
+                      : !stats.hasSubmittedToday
+                      ? "আজকের সাপোর্ট অপশনাল — কোনো পেনাল্টি নেই"
+                      : stats.pendingCount > 0 
+                      ? `${stats.pendingCount} Supports Remaining` 
+                      : 'All Daily Supports Done!'}
                   </p>
                   <p className="text-xs text-gray-400">
-                    {stats.pendingCount > 0 ? 'Finish these before midnight to maintain your streak!' : 'Great job! Your daily streak is preserved.'}
+                    {isStaff
+                      ? "আপনি চাইলে সহকর্মীদের পোস্টে সাপোর্ট দিতে পারেন।"
+                      : !stats.hasSubmittedToday
+                      ? "লিংক দিলে তবেই সাপোর্ট করা বাধ্যতামূলক হয়।"
+                      : stats.pendingCount > 0 
+                      ? 'Finish these before midnight to maintain your streak!' 
+                      : 'Great job! Your daily streak is preserved.'}
                   </p>
                 </div>
               </div>
@@ -737,6 +790,147 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
           </div>
         </div>
       </section>
+
+      {/* Notice Board & All Done Quick Hub Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Notice Board Preview Card */}
+        <div 
+          onClick={() => onNavigate('announcements')}
+          className="group cursor-pointer bg-gradient-to-br from-[#161622] via-[#121218] to-[#14141A] p-4 sm:p-5 rounded-2xl border border-indigo-500/25 hover:border-indigo-500/50 shadow-lg hover:shadow-indigo-500/10 transition-all duration-200 flex flex-col justify-between gap-3"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition-transform">
+                <Megaphone className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
+                    অফিসিয়াল নোটিশ বোর্ড
+                  </h3>
+                  {unreadAnnouncementsCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-black animate-pulse">
+                      {unreadAnnouncementsCount} টি নতুন
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">গুরুত্বপূর্ণ নিয়ম ও এডমিন নির্দেশনা</p>
+              </div>
+            </div>
+            <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 group-hover:translate-x-0.5 transition-transform">
+              <ArrowRight className="w-4 h-4" />
+            </span>
+          </div>
+
+          {pinnedOrLatestNotice ? (
+            <div className="p-3 rounded-xl bg-black/40 border border-indigo-500/15 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-200 truncate">
+                {pinnedOrLatestNotice.isPinned && (
+                  <span className="text-amber-400 text-[10px]">📌 পিন্ড:</span>
+                )}
+                <span className="truncate">{pinnedOrLatestNotice.title}</span>
+              </div>
+              <p className="text-[11px] text-gray-400 line-clamp-2 leading-relaxed">
+                {pinnedOrLatestNotice.message}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500">বর্তমানে কোনো সক্রিয় নোটিশ নেই।</p>
+          )}
+
+          <div className="flex items-center justify-between text-[11px] text-indigo-400 font-semibold pt-1 border-t border-indigo-500/10">
+            <span>সব নোটিশ ও এডমিন মেসেজ দেখুন</span>
+            <span className="group-hover:underline">নোটিশ বোর্ড খুলুন →</span>
+          </div>
+        </div>
+
+        {/* All Done Daily Status Card */}
+        <div 
+          onClick={() => onNavigate('all_done')}
+          className={`group cursor-pointer p-4 sm:p-5 rounded-2xl border shadow-lg transition-all duration-200 flex flex-col justify-between gap-3 ${
+            isAllDone
+              ? 'bg-gradient-to-br from-[#0F2018] via-[#101915] to-[#121614] border-emerald-500/30 hover:border-emerald-500/60 hover:shadow-emerald-500/10'
+              : stats.pendingCount === 0
+              ? 'bg-gradient-to-br from-[#1B1E12] via-[#161912] to-[#131512] border-amber-500/30 hover:border-amber-500/60 hover:shadow-amber-500/10'
+              : 'bg-gradient-to-br from-[#1A1616] via-[#141214] to-[#121216] border-[#2A2A30] hover:border-emerald-500/30'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl border flex items-center justify-center group-hover:scale-105 transition-transform ${
+                isAllDone
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                  : stats.pendingCount === 0
+                  ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                  : 'bg-gray-800/60 text-gray-400 border-gray-700'
+              }`}>
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                    দৈনিক All Done সিস্টেম
+                  </h3>
+                  {isAllDone && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                      ✓ অল ডান
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">সবার আগে সাপোর্ট শেষ করে বোনাস পয়েন্ট ও ব্যাজ নিন</p>
+              </div>
+            </div>
+            <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 group-hover:translate-x-0.5 transition-transform">
+              <ArrowRight className="w-4 h-4" />
+            </span>
+          </div>
+
+          <div className={`p-3 rounded-xl border space-y-1.5 ${
+            isAllDone
+              ? 'bg-emerald-950/30 border-emerald-500/20 text-emerald-200'
+              : stats.pendingCount === 0
+              ? 'bg-amber-950/30 border-amber-500/20 text-amber-200'
+              : 'bg-black/40 border-gray-800 text-gray-300'
+          }`}>
+            {isAllDone ? (
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="flex items-center gap-1.5 text-emerald-300">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  আজকের অল ডান পজিশন: #{userTodayAllDone?.fastestRank || 'সফল'}
+                </span>
+                <span className="text-[11px] text-emerald-400 font-mono">
+                  +{(userTodayAllDone?.bonusPoints || 0) + (userTodayAllDone?.basePoints || 3)} pts অর্জিত
+                </span>
+              </div>
+            ) : stats.pendingCount === 0 ? (
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="flex items-center gap-1 text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  সব সাপোর্ট শেষ! এখনই All Done সাবমিট করুন
+                </span>
+                <span className="text-[10px] bg-amber-500 text-black px-2 py-0.5 rounded-full font-bold">
+                  ক্লিক করুন
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-xs text-gray-400">
+                <span>আজকে এখনও {stats.pendingCount} টি সাপোর্ট বাকি</span>
+                <span className="text-gray-500 font-mono text-[11px]">{stats.completedCount}/{stats.requiredCount}</span>
+              </div>
+            )}
+            <p className="text-[11px] opacity-80 leading-relaxed">
+              {isAllDone 
+                ? `সাবমিটের সময়: ${userTodayAllDone?.submittedTimeBst || 'আজকে'} • লিডারবোর্ডে আপনার নাম নথিভুক্ত রয়েছে।`
+                : 'সব পোস্টকে লাইক, কমেন্ট ও ফলো করার পর অল ডান সাবমিট করে লিডারবোর্ডের শীর্ষে উঠুন।'}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-emerald-400 font-semibold pt-1 border-t border-emerald-500/10">
+            <span>আজকের দ্রুততম সাপোর্টার তালিকা</span>
+            <span className="group-hover:underline">All Done বোর্ড খুলুন →</span>
+          </div>
+        </div>
+      </div>
 
       {/* Statistics Cards Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 sm:gap-4">
@@ -804,6 +998,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
 
       {/* Sponsored Dashboard Banner */}
       <SponsoredBanner position="dashboard_banner" />
+
+      {/* Rewarded Demo Video Ad Card for Testing */}
+      <DisplayAdSlot format="video_reward_card" slotId="dash_reward_demo" />
 
       {/* Today's Link Feed (Quick Preview with Support action) */}
       <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-4 sm:p-6 shadow-xs space-y-4">
@@ -933,23 +1130,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ onNavigate, on
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
 
-                  <button
-                    onClick={() => markLinkSupported(link.id)}
-                    disabled={isSupported}
-                    className={`py-1.5 px-3.5 text-xs font-bold rounded-lg flex items-center justify-center gap-1 transition-all ${
-                      isSupported
-                        ? 'bg-green-600 text-white cursor-default'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white active:scale-95 shadow-xs'
-                    }`}
-                  >
-                    {isSupported ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" /> Done
-                      </>
-                    ) : (
-                      'Mark Support'
-                    )}
-                  </button>
+                  {isSupported ? (
+                    <span className="py-1.5 px-3 text-xs font-bold rounded-lg bg-emerald-950/40 text-emerald-400 border border-emerald-500/30 flex items-center justify-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> সম্পন্ন
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onNavigate('support_session')}
+                      className="py-1.5 px-3 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center gap-1 transition-all shadow-xs active:scale-95"
+                      title="প্লেলিস্ট সেশনে গিয়ে সাপোর্ট সম্পন্ন করুন"
+                    >
+                      <Play className="w-3 h-3 fill-current" /> সেশন
+                    </button>
+                  )}
                 </div>
               </div>
             );

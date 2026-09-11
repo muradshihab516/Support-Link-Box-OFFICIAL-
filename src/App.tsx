@@ -16,15 +16,19 @@ import { ReportConversationModal } from './components/member/ReportConversationM
 import { AuthModal } from './components/auth/AuthModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { AnnouncementSection } from './components/announcements/AnnouncementSection';
+import { AllDoneSection } from './components/alldone/AllDoneSection';
+
+const VALID_VIEWS = ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'announcements', 'all_done', 'profile', 'free_tools', 'admin', 'login'];
 
 const getInitialView = (): string => {
   try {
     const hash = window.location.hash.replace('#', '');
-    if (hash && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin', 'login'].includes(hash)) {
+    if (hash && VALID_VIEWS.includes(hash)) {
       return hash;
     }
     const saved = localStorage.getItem('slb_current_view');
-    if (saved && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin', 'login'].includes(saved)) {
+    if (saved && VALID_VIEWS.includes(saved)) {
       return saved;
     }
   } catch {}
@@ -71,7 +75,7 @@ const AppContent: React.FC = () => {
     const handleHashChange = () => {
       try {
         const hash = window.location.hash.replace('#', '');
-        if (hash && ['dashboard', 'daily_links', 'support_session', 'leaderboard', 'profile', 'free_tools', 'admin'].includes(hash)) {
+        if (hash && VALID_VIEWS.includes(hash)) {
           setCurrentViewState(hash);
           localStorage.setItem('slb_current_view', hash);
         }
@@ -128,6 +132,18 @@ const AppContent: React.FC = () => {
       case 'leaderboard':
         return (
           <LeaderboardView
+            onNavigate={(view) => setCurrentView(view)}
+          />
+        );
+      case 'announcements':
+        return (
+          <AnnouncementSection
+            onNavigate={(view) => setCurrentView(view)}
+          />
+        );
+      case 'all_done':
+        return (
+          <AllDoneSection
             onNavigate={(view) => setCurrentView(view)}
           />
         );

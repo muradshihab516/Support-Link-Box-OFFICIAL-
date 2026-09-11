@@ -15,7 +15,8 @@ import {
   RefreshCw,
   Crown,
   ExternalLink,
-  Shield
+  Shield,
+  Copy
 } from 'lucide-react';
 import { SystemSettings } from '../../types';
 import { 
@@ -35,6 +36,80 @@ export const SettingsAdmin: React.FC = () => {
   } = useApp();
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
+
+  const ALL_DONE_SQL = `-- Create All Done & Announcements Tables for Supabase
+CREATE TABLE IF NOT EXISTS public.announcements (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT DEFAULT 'general',
+    issued_by TEXT NOT NULL,
+    issued_by_role TEXT DEFAULT 'admin',
+    issued_by_avatar TEXT,
+    published_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    date DATE DEFAULT CURRENT_DATE,
+    time_bst TEXT NOT NULL,
+    image_url TEXT,
+    is_important BOOLEAN DEFAULT FALSE,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    status TEXT DEFAULT 'published',
+    scheduled_at TIMESTAMP WITH TIME ZONE,
+    read_by JSONB DEFAULT '[]'::jsonb,
+    community_id TEXT DEFAULT 'comm_default',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.all_done (
+    id TEXT PRIMARY KEY,
+    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    member_name TEXT NOT NULL,
+    member_number INTEGER NOT NULL,
+    member_avatar TEXT,
+    date DATE DEFAULT CURRENT_DATE,
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    submitted_at_timestamp BIGINT NOT NULL,
+    submitted_time_bst TEXT NOT NULL,
+    message TEXT,
+    other_ids TEXT,
+    other_id_links TEXT,
+    fastest_rank INTEGER,
+    bonus_points INTEGER DEFAULT 0,
+    base_points INTEGER DEFAULT 3,
+    status TEXT DEFAULT 'verified',
+    community_id TEXT DEFAULT 'comm_default',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_member_all_done_per_day UNIQUE (member_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS public.alt_id_disclosures (
+    id TEXT PRIMARY KEY,
+    all_done_id TEXT REFERENCES public.all_done(id) ON DELETE CASCADE,
+    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    member_name TEXT NOT NULL,
+    member_number INTEGER NOT NULL,
+    date DATE DEFAULT CURRENT_DATE,
+    alt_names TEXT NOT NULL,
+    alt_id_links TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.all_done ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alt_id_disclosures ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access to announcements" ON public.announcements FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to announcements" ON public.announcements FOR ALL USING (true);
+CREATE POLICY "Allow public read access to all_done" ON public.all_done FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to all_done" ON public.all_done FOR ALL USING (true);
+CREATE POLICY "Allow public read access to alt_id_disclosures" ON public.alt_id_disclosures FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to alt_id_disclosures" ON public.alt_id_disclosures FOR ALL USING (true);`;
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(ALL_DONE_SQL);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 3000);
+  };
 
   const handleManualSync = async () => {
     setIsSyncing(true);
@@ -164,12 +239,22 @@ export const SettingsAdmin: React.FC = () => {
             </div>
 
             <div className="p-3.5 bg-[#0E0E10] border border-[#1E1E20] rounded-xl space-y-2">
-              <div className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Supabase PostgreSQL Schema & RLS</span>
+              <div className="text-xs font-bold text-indigo-400 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Supabase PostgreSQL Schema & RLS</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="px-2 py-0.5 text-[10px] font-bold bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span>{copiedSql ? 'কপি হয়েছে!' : 'All Done SQL কপি করুন'}</span>
+                </button>
               </div>
               <p className="text-[11px] text-gray-400 leading-relaxed">
-                ডাটাবেসের সম্পূর্ণ SQL স্ক্রিপ্ট <code className="text-indigo-300 bg-[#16161A] px-1 py-0.5 rounded font-mono">supabase-schema.sql</code> ফাইলে প্রস্তুত রয়েছে। এতে Row Level Security (RLS) ও ৫টি টেবিল (members, daily_links, support_records, audit_logs, notices) ডিফাইন করা আছে।
+                ডাটাবেসের সম্পূর্ণ SQL স্ক্রিপ্ট <code className="text-indigo-300 bg-[#16161A] px-1 py-0.5 rounded font-mono">supabase-schema.sql</code> ফাইলে প্রস্তুত রয়েছে। Supabase রিমোটে <code className="text-indigo-300 bg-[#16161A] px-1 py-0.5 rounded font-mono">all_done</code> বা <code className="text-indigo-300 bg-[#16161A] px-1 py-0.5 rounded font-mono">announcements</code> টেবিল মাইগ্রেশন বাকি থাকলেও স্বয়ংক্রিয়ভাবে LocalStorage এবং notices টেবিল ফলব্যাক নির্বিঘ্নে ডেটা পরিচালনা করে।
               </p>
             </div>
           </div>
@@ -451,10 +536,22 @@ export const SettingsAdmin: React.FC = () => {
 
         {/* Monetization Engine Toggles */}
         <div className="bg-[#131315] rounded-2xl border border-[#1E1E20] p-5 sm:p-6 space-y-4 shadow-xs">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Megaphone className="w-4 h-4 text-indigo-400" />
-            Monetization & Ads Switchboard
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Megaphone className="w-4 h-4 text-indigo-400" />
+              Monetization & Ads Switchboard
+            </h3>
+            <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[10px] border border-emerald-500/30">
+              Demo Ads Mode Active
+            </span>
+          </div>
+
+          <div className="p-3 bg-gradient-to-r from-indigo-950/40 via-[#13131D] to-purple-950/30 border border-indigo-500/30 rounded-xl text-xs text-indigo-200">
+            <p className="font-semibold text-white">💡 অ্যাডমিন টেস্টিং মোড সক্রিয়:</p>
+            <p className="mt-0.5 text-gray-400 leading-relaxed">
+              ডোমেইন কেনার আগ পর্যন্ত Monetag বা AdSense লাইভ করার পরিবর্তে সব জায়গায় ইন্টারঅ্যাক্টিভ <strong>ডেমো ব্যানার, ইন-ফিড অ্যাড এবং ১০ সেকেন্ডের রিওয়ার্ডেড ভিডিও অ্যাড</strong> চালু রাখা হয়েছে। বাকি অ্যাডমিনরা সম্পূর্ণ ইউজার ফ্লো ও পয়েন্ট রিওয়ার্ড টেস্ট করতে পারবেন।
+            </p>
+          </div>
 
           <div className="space-y-3">
             <label className="flex items-center justify-between p-3 bg-[#0E0E10] border border-[#1E1E20] rounded-xl cursor-pointer hover:border-gray-700 transition-colors">

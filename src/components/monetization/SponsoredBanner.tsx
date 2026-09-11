@@ -11,20 +11,28 @@ interface SponsoredBannerProps {
 export const SponsoredBanner: React.FC<SponsoredBannerProps> = ({ position, className = '' }) => {
   const { sponsors, trackSponsorImpression, trackSponsorClick, settings } = useApp();
 
-  if (!settings.enableFeaturedSponsors) return null;
-
+  const isEnabled = Boolean(settings.enableFeaturedSponsors);
   const activeSponsors = sponsors.filter(s => s.position === position && s.status === 'active');
-  if (activeSponsors.length === 0) return null;
+  const sponsor = (isEnabled && activeSponsors.length > 0)
+    ? [...activeSponsors].sort((a, b) => a.priority - b.priority)[0]
+    : null;
 
-  // Pick highest priority
-  const sponsor = activeSponsors.sort((a, b) => a.priority - b.priority)[0];
+  const sponsorId = sponsor ? sponsor.id : null;
+  const recordedSponsorIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
-    trackSponsorImpression(sponsor.id);
-  }, [sponsor.id]);
+    if (sponsorId && recordedSponsorIdRef.current !== sponsorId) {
+      recordedSponsorIdRef.current = sponsorId;
+      trackSponsorImpression(sponsorId);
+    }
+  }, [sponsorId, trackSponsorImpression]);
 
-  const handleClick = (e: React.MouseEvent) => {
-    trackSponsorClick(sponsor.id);
+  if (!isEnabled || !sponsor) return null;
+
+  const handleClick = () => {
+    if (sponsor) {
+      trackSponsorClick(sponsor.id);
+    }
   };
 
   return (
@@ -76,17 +84,27 @@ export const SponsoredBanner: React.FC<SponsoredBannerProps> = ({ position, clas
 export const FeaturedSponsorCard: React.FC = () => {
   const { sponsors, trackSponsorImpression, trackSponsorClick, settings } = useApp();
 
-  if (!settings.enableFeaturedSponsors) return null;
+  const isEnabled = Boolean(settings.enableFeaturedSponsors);
+  const featured = isEnabled 
+    ? (sponsors.find(s => s.packageType === 'featured_sponsor' && s.status === 'active') || sponsors[0]) 
+    : null;
 
-  const featured = sponsors.find(s => s.packageType === 'featured_sponsor' && s.status === 'active') || sponsors[0];
-  if (!featured) return null;
+  const featuredId = featured ? featured.id : null;
+  const recordedFeaturedIdRef = React.useRef<string | null>(null);
 
   useEffect(() => {
-    trackSponsorImpression(featured.id);
-  }, [featured.id]);
+    if (featuredId && recordedFeaturedIdRef.current !== featuredId) {
+      recordedFeaturedIdRef.current = featuredId;
+      trackSponsorImpression(featuredId);
+    }
+  }, [featuredId, trackSponsorImpression]);
+
+  if (!isEnabled || !featured) return null;
 
   const handleClick = () => {
-    trackSponsorClick(featured.id);
+    if (featured) {
+      trackSponsorClick(featured.id);
+    }
   };
 
   return (

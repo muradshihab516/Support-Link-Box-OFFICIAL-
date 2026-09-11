@@ -310,32 +310,31 @@ export function checkLateSupportPunishment(
   const adsPerHour = options?.adsPerHour ?? 1;
   const maxAds = options?.maxAds ?? 5;
 
-  // Midnight is 00:00.
-  // Window: 00:00 to 10:00 AM (10 hours)
-  const isLate = hours >= 0 && hours < 24; // If checked after deadline
-  const isPastCutoff = hours >= 10 && hours < 24;
+  // Active Support Period: 10:00 AM to 11:59:59 PM BST (deadline is 11:59:59 PM midnight)
+  // Late Recovery Window: 00:00 (12:00 AM Midnight) to 09:59:59 AM BST (10-hour recovery window)
+  const isLate = hours >= 0 && hours < 10;
+  const isPastCutoff = false; // During daytime normal operations, current day cutoff hasn't expired
 
   let totalMinutesLate = 0;
-  if (hours < 10) {
+  if (isLate) {
     // Between 00:00 and 09:59
     totalMinutesLate = (hours * 60) + minutes;
-  } else {
-    // Past 10:00 AM
-    totalMinutesLate = (10 * 60); // Max 10 hours
   }
 
-  const lateHours = Math.max(1, Math.min(10, Math.ceil(totalMinutesLate / 60)));
+  const lateHours = isLate ? Math.max(1, Math.min(10, Math.ceil(totalMinutesLate / 60))) : 0;
   const hLate = Math.floor(totalMinutesLate / 60);
   const mLate = totalMinutesLate % 60;
 
-  const lateFormattedBangla = hLate > 0 
-    ? `${toBengaliNumerals(hLate)} ঘণ্টা ${toBengaliNumerals(mLate)} মিনিট`
-    : `${toBengaliNumerals(mLate)} মিনিট`;
+  const lateFormattedBangla = isLate
+    ? (hLate > 0 
+        ? `${toBengaliNumerals(hLate)} ঘণ্টা ${toBengaliNumerals(mLate)} মিনিট`
+        : `${toBengaliNumerals(mLate)} মিনিট`)
+    : 'সময় বাকি আছে';
 
-  const requiredAds = Math.min(maxAds, Math.max(1, lateHours * adsPerHour));
+  const requiredAds = isLate ? Math.min(maxAds, Math.max(1, lateHours * adsPerHour)) : 0;
 
   return {
-    isLate: true,
+    isLate,
     isPastCutoff,
     lateMinutes: totalMinutesLate,
     lateHours,

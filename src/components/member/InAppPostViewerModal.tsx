@@ -47,8 +47,6 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
 }) => {
   const { 
     currentUser, 
-    markLinkSupported, 
-    unmarkLinkSupported, 
     getTodaySupportStats 
   } = useApp();
 
@@ -82,30 +80,6 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
   const handleNext = () => {
     if (hasNext) {
       onSelectLink(allLinks[currentIndex + 1]);
-    }
-  };
-
-  const handleToggleSupport = () => {
-    if (isSupported) {
-      setOptimisticSupported(false);
-      setTimeout(() => {
-        unmarkLinkSupported(currentLink.id);
-      }, 0);
-    } else {
-      setOptimisticSupported(true);
-      try {
-        if ('vibrate' in navigator) navigator.vibrate(25);
-      } catch {}
-
-      confetti({
-        particleCount: 60,
-        spread: 70,
-        origin: { y: 0.7 }
-      });
-
-      setTimeout(() => {
-        markLinkSupported(currentLink.id);
-      }, 0);
     }
   };
 
@@ -342,17 +316,17 @@ export const InAppPostViewerModal: React.FC<InAppPostViewerModalProps> = ({
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             {!isOwnLink ? (
-              <button
-                onClick={handleToggleSupport}
-                className={`flex-1 sm:flex-none px-5 py-2.5 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 ${
-                  isSupported
-                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/30'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>{isSupported ? '✓ Supported (সম্পন্ন হয়েছে)' : 'Mark as Supported (সাপোর্ট করেছি)'}</span>
-              </button>
+              isSupported ? (
+                <div className="flex-1 sm:flex-none px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl flex items-center justify-center gap-2 bg-emerald-950/40 text-emerald-300 border border-emerald-500/40 shadow-xs">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>✓ Supported (সাপোর্ট সম্পন্ন)</span>
+                </div>
+              ) : (
+                <div className="flex-1 sm:flex-none px-4 py-2.5 text-xs sm:text-sm font-medium rounded-xl flex items-center justify-center gap-2 bg-amber-950/30 text-amber-300 border border-amber-500/30">
+                  <span className="font-bold">○ সাপোর্ট বাকি</span>
+                  <span className="text-[11px] text-gray-400 hidden sm:inline">(প্লেলিস্ট সেশনে সম্পন্ন করুন)</span>
+                </div>
+              )
             ) : (
               <span className="text-xs text-gray-500 italic px-3 py-2 bg-[#202024] rounded-lg">
                 এটি আপনার নিজের পোস্ট

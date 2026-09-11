@@ -20,7 +20,11 @@ import {
   AdDailyRollup,
   DataCleanupLog,
   RewardRedemption,
-  LateSupportReport
+  LateSupportReport,
+  AnnouncementItem,
+  AllDoneRecord,
+  AltIdDisclosure,
+  PointActivityTransaction
 } from '../types';
 
 export const INITIAL_BADGES: Badge[] = [
@@ -2145,5 +2149,213 @@ export const INITIAL_LATE_SUPPORT_REPORTS: LateSupportReport[] = [
     updatedAt: '2026-08-26 02:30 PM'
   }
 ];
+
+// =========================================================================
+// 📢 INITIAL ANNOUNCEMENTS
+// =========================================================================
+export const INITIAL_ANNOUNCEMENTS: AnnouncementItem[] = [
+  {
+    id: 'ann_deadline_today',
+    title: 'Support Deadline আজ রাত 11:59 PM BST',
+    message: 'Welcome all members! আজকের সাপোর্ট উইন্ডোর ডেডলাইন রাত ১১:৫৯ মিনিট পর্যন্ত। নিজের জমা দেওয়া লিংকের বাধ্যবাধকতা থাকলে অবশ্যই সময়মতো সাপোর্ট সম্পন্ন করে All Done জমা দিন। অন্য আইডি দিয়ে সাপোর্ট দিলে All Done ফর্মের নিচে বিকল্প আইডি উল্লেখ করুন।',
+    type: 'important',
+    issuedBy: 'Md Shihab Khan',
+    issuedByRole: 'Developer & Admin',
+    issuedByAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    publishedAt: new Date(Date.now() - (4 * 3600 * 1000)).toISOString(),
+    date: '2026-09-10',
+    timeBst: '08:00 AM BST',
+    isImportant: true,
+    isPinned: true,
+    status: 'published',
+    readBy: ['user_dev_shihab'],
+    createdAt: new Date(Date.now() - (4 * 3600 * 1000)).toISOString(),
+    communityId: 'comm_default'
+  },
+  {
+    id: 'ann_features_launch',
+    title: '📢 নতুন ফিচার: All Done ও Announcement ডেটাবেজ সেকশন চালু!',
+    message: 'সাপোর্ট লিংক বক্সে দুটি নতুন এবং সম্পূর্ণ ডেটাবেজ-ড্রিভেন সেকশন উন্মোচন করা হলো:\n\n1️⃣ **Announcement সেকশন**: অ্যাডমিন ও ডেভেলপারদের সমস্ত গুরুত্বপূর্ণ নোটিশ, আপডেট ও নির্দেশনা এখন এখানে সার্বক্ষণিক সংরক্ষিত থাকবে।\n2️⃣ **All Done সেকশন**: প্রতিদিন বিকেল ৫:০০ টা (BST) থেকে শুরু হবে অল ডান সেশন। প্রতিদিনের প্রথম ৫ জন পাবেন আকর্ষণীয় **Fastest Supporters** বোনাস পয়েন্ট (+১০, +৮, +৬, +৪, +২ পয়েন্ট)!',
+    type: 'update',
+    issuedBy: 'Murad Shihab',
+    issuedByRole: 'Super Admin',
+    issuedByAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    publishedAt: new Date(Date.now() - (8 * 3600 * 1000)).toISOString(),
+    date: '2026-09-10',
+    timeBst: '10:30 AM BST',
+    isImportant: false,
+    isPinned: false,
+    status: 'published',
+    readBy: ['user_dev_shihab'],
+    createdAt: new Date(Date.now() - (8 * 3600 * 1000)).toISOString(),
+    communityId: 'comm_default'
+  },
+  {
+    id: 'ann_fastest_supporters_prev',
+    title: '🏆 FASTEST SUPPORTERS: Yesterday\'s All Done Champions 🎉',
+    message: 'গতকালের অল ডান সেশনে যারা প্রথম ৫ জনের মধ্যে সাপোর্ট সম্পন্ন করেছেন তাদের অভিনন্দন!\n\n🥇 ১ম স্থান: Tanvir Hasan (+10 Points)\n🥈 ২য় স্থান: Farhana Akter (+8 Points)\n🥉 ৩য় স্থান: Nusrat Jahan (+6 Points)\n4️⃣ ৪র্থ স্থান: Shuvo Ahmed (+4 Points)\n5️⃣ ৫ম স্থান: Rashedul Karim (+2 Points)\n\nসকল পয়েন্ট সফলভাবে সদস্যের ব্যালেন্সে যোগ করা হয়েছে।',
+    type: 'fastest_supporters',
+    issuedBy: 'Support Link Box Automated Bot',
+    issuedByRole: 'System',
+    publishedAt: '2026-09-09T12:00:00.000Z',
+    date: '2026-09-09',
+    timeBst: '06:00 PM BST',
+    isImportant: false,
+    isPinned: false,
+    status: 'published',
+    readBy: ['user_dev_shihab', 'user_emon'],
+    createdAt: '2026-09-09T12:00:00.000Z',
+    communityId: 'comm_default'
+  }
+];
+
+// =========================================================================
+// ✅ INITIAL ALL DONE RECORDS
+// =========================================================================
+export const INITIAL_ALL_DONE: AllDoneRecord[] = [
+  // Today's All Done Submissions (2026-09-10)
+  {
+    id: 'ad_today_1',
+    memberId: 'user_farhana',
+    memberName: 'Farhana Akter',
+    memberNumber: 102,
+    memberAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    date: '2026-09-10',
+    submittedAt: '2026-09-10T11:03:12.000Z',
+    submittedAtTimestamp: 1789047792000,
+    submittedTimeBst: '05:03:12 PM BST',
+    message: 'সব লিংকে রিয়েক্ট ও কমেন্ট সম্পূর্ণ করেছি। ধন্যবাদ সবাইকে!',
+    fastestRank: 1,
+    bonusPoints: 10,
+    basePoints: 3,
+    status: 'verified',
+    communityId: 'comm_default'
+  },
+  {
+    id: 'ad_today_2',
+    memberId: 'user_tanvir',
+    memberName: 'Tanvir Hasan',
+    memberNumber: 103,
+    memberAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    date: '2026-09-10',
+    submittedAt: '2026-09-10T11:07:44.000Z',
+    submittedAtTimestamp: 1789048064000,
+    submittedTimeBst: '05:07:44 PM BST',
+    message: 'অল ডান! আজকের পোস্টগুলো চমৎকার ছিল।',
+    fastestRank: 2,
+    bonusPoints: 8,
+    basePoints: 3,
+    status: 'verified',
+    communityId: 'comm_default'
+  },
+  {
+    id: 'ad_today_3',
+    memberId: 'user_nusrat',
+    memberName: 'Nusrat Jahan',
+    memberNumber: 105,
+    memberAvatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+    date: '2026-09-10',
+    submittedAt: '2026-09-10T11:14:20.000Z',
+    submittedAtTimestamp: 1789048460000,
+    submittedTimeBst: '05:14:20 PM BST',
+    message: 'Alhamdulillah all done! Support session was super smooth.',
+    otherIds: 'Nusrat Tech Hub',
+    otherIdLinks: 'https://facebook.com/nusrat.techhub',
+    fastestRank: 3,
+    bonusPoints: 6,
+    basePoints: 3,
+    status: 'verified',
+    communityId: 'comm_default'
+  },
+  {
+    id: 'ad_today_4',
+    memberId: 'user_shuvo',
+    memberName: 'Shuvo Ahmed',
+    memberNumber: 106,
+    memberAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    date: '2026-09-10',
+    submittedAt: '2026-09-10T11:22:05.000Z',
+    submittedAtTimestamp: 1789048925000,
+    submittedTimeBst: '05:22:05 PM BST',
+    message: 'Done for today!',
+    fastestRank: 4,
+    bonusPoints: 4,
+    basePoints: 3,
+    status: 'verified',
+    communityId: 'comm_default'
+  },
+  // Yesterday's All Done Records (2026-09-09) for History view
+  {
+    id: 'ad_prev_1',
+    memberId: 'user_tanvir',
+    memberName: 'Tanvir Hasan',
+    memberNumber: 103,
+    memberAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    date: '2026-09-09',
+    submittedAt: '2026-09-09T11:02:10.000Z',
+    submittedAtTimestamp: 1788961330000,
+    submittedTimeBst: '05:02:10 PM BST',
+    message: '১ম হয়েছি আলহামদুলিল্লাহ!',
+    fastestRank: 1,
+    bonusPoints: 10,
+    basePoints: 3,
+    status: 'verified',
+    communityId: 'comm_default'
+  },
+  {
+    id: 'ad_prev_2',
+    memberId: 'user_farhana',
+    memberName: 'Farhana Akter',
+    memberNumber: 102,
+    memberAvatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    date: '2026-09-09',
+    submittedAt: '2026-09-09T11:06:55.000Z',
+    submittedAtTimestamp: 1788961615000,
+    submittedTimeBst: '05:06:55 PM BST',
+    fastestRank: 2,
+    bonusPoints: 8,
+    basePoints: 3,
+    status: 'verified',
+    communityId: 'comm_default'
+  }
+];
+
+export const INITIAL_ALT_ID_DISCLOSURES: AltIdDisclosure[] = [
+  {
+    id: 'alt_1',
+    allDoneId: 'ad_today_3',
+    memberId: 'user_nusrat',
+    memberName: 'Nusrat Jahan',
+    memberNumber: 105,
+    date: '2026-09-10',
+    altNames: 'Nusrat Tech Hub',
+    altIdLinks: 'https://facebook.com/nusrat.techhub',
+    createdAt: '2026-09-10T11:14:20.000Z'
+  }
+];
+
+export const INITIAL_POINT_TRANSACTIONS: PointActivityTransaction[] = [
+  {
+    id: 'pt_1',
+    memberId: 'user_farhana',
+    activityType: 'ALL_DONE',
+    referenceId: 'ad_today_1',
+    points: 3,
+    date: '2026-09-10',
+    note: 'Daily All Done submission reward',
+    createdAt: '2026-09-10T11:03:12.000Z'
+  },
+  {
+    id: 'pt_2',
+    memberId: 'user_farhana',
+    activityType: 'FASTEST_SUPPORTER_BONUS',
+    referenceId: 'ad_today_1',
+    points: 10,
+    date: '2026-09-10',
+    note: '1st Fastest Supporter Champion Bonus 🥇',
+    createdAt: '2026-09-10T11:03:12.000Z'
+  }
+];
+
 
 

@@ -19,7 +19,8 @@ import {
   Trophy,
   LayoutDashboard,
   Play,
-  Palette
+  Palette,
+  Megaphone
 } from 'lucide-react';
 import { AuthModal } from '../auth/AuthModal';
 import { ThemeSelectorModal } from '../theme/ThemeSelectorModal';
@@ -45,7 +46,9 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
     markAllNotificationsRead,
     settings,
     logout,
-    setActiveReportModalId
+    setActiveReportModalId,
+    announcements,
+    isMemberAllDoneToday
   } = useApp();
 
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -79,6 +82,8 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
   }, []);
 
   const unreadNotifs = notifications.filter(n => !n.read && (n.userId === currentUser?.id || n.userId === 'all'));
+  const unreadAnnouncementsCount = currentUser ? announcements.filter(a => !a.readBy?.includes(currentUser.id)).length : 0;
+  const isAllDoneToday = currentUser ? isMemberAllDoneToday(currentUser.id) : false;
 
   return (
     <>
@@ -181,6 +186,44 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate, onSubmi
               >
                 <Play className="w-3.5 h-3.5 text-red-500 fill-current" />
                 <span>Player Session</span>
+              </button>
+
+              <button
+                onClick={() => onNavigate('announcements')}
+                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 relative ${
+                  currentView === 'announcements'
+                    ? 'text-indigo-400 bg-indigo-600/10 border border-indigo-500/20'
+                    : 'text-gray-400 hover:text-white hover:bg-[#1E1E20]'
+                }`}
+                title="অফিশিয়াল নোটিশ ও অ্যানাউন্সমেন্ট"
+              >
+                <div className="relative">
+                  <Megaphone className="w-4 h-4 text-indigo-400" />
+                  {unreadAnnouncementsCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 px-1 py-0.2 bg-rose-500 text-white rounded-full text-[9px] font-bold">
+                      {unreadAnnouncementsCount}
+                    </span>
+                  )}
+                </div>
+                <span>Notice</span>
+              </button>
+
+              <button
+                onClick={() => onNavigate('all_done')}
+                className={`px-3 py-2 text-xs font-semibold rounded-lg transition-colors flex items-center gap-1.5 relative ${
+                  currentView === 'all_done'
+                    ? 'text-emerald-400 bg-emerald-600/10 border border-emerald-500/20'
+                    : 'text-gray-400 hover:text-white hover:bg-[#1E1E20]'
+                }`}
+                title="দৈনিক অল ডান সাবমিশন ও র‍্যাংকিং"
+              >
+                <div className="relative">
+                  <CheckCircle2 className={`w-4 h-4 ${isAllDoneToday ? 'text-emerald-400' : 'text-emerald-500/70'}`} />
+                  {isAllDoneToday && (
+                    <span className="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-400" />
+                  )}
+                </div>
+                <span>All Done</span>
               </button>
 
               <button

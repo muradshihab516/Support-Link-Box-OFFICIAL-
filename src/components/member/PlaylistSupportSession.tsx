@@ -34,6 +34,7 @@ import {
   getFacebookWebBrowserUrl 
 } from '../../utils/facebookLinks';
 import { ReportModal } from './ReportModal';
+import { DailyAllDoneBox } from '../alldone/DailyAllDoneBox';
 
 interface PlaylistSupportSessionProps {
   initialLinkId?: string;
@@ -701,32 +702,23 @@ export const PlaylistSupportSession: React.FC<PlaylistSupportSessionProps> = ({
           ========================================================================= */}
       <div className="shrink-0 bg-gradient-to-b from-[#131318] to-[#0E0E12] border-b border-[#1E1E24] p-3 sm:p-4">
         {isAllSessionCompleted ? (
-          /* All Completed Screen */
-          <div className="py-4 text-center space-y-2.5">
-            <div className="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 to-green-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
-              <Trophy className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-base sm:text-lg font-black text-white">
-                আজকের সকল লিংক সফলভাবে সম্পন্ন হয়েছে! 🎉
-              </h3>
-              <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                আপনি আজকের সব লিংকে সফলভাবে সাপোর্ট দিয়েছেন। দারুণ পারফরম্যান্স!
-              </p>
-            </div>
+          /* All Completed Screen with DailyAllDoneBox */
+          <div className="py-2 space-y-4">
+            <DailyAllDoneBox onNavigate={onClose ? () => onClose() : undefined} />
+
             <div className="flex items-center justify-center gap-2 pt-1">
               <button
                 onClick={() => setIsAllSessionCompleted(false)}
                 className="px-3.5 py-1.5 bg-[#1C1C24] hover:bg-[#252532] border border-[#2B2B38] text-gray-300 hover:text-white text-xs font-bold rounded-xl transition-colors"
               >
-                প্লেলিস্ট রিভিউ করুন
+                প্লেলিস্ট লিংকগুলো আবার দেখুন
               </button>
               {onClose && (
                 <button
                   onClick={onClose}
                   className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-colors"
                 >
-                  ড্যাশবোর্ডে ফিরুন
+                  লিংক বক্সে ফিরুন
                 </button>
               )}
             </div>

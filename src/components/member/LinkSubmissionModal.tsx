@@ -292,6 +292,204 @@ export const LinkSubmissionModal: React.FC<LinkSubmissionModalProps> = ({
             </button>
           </div>
 
+          {/* Admin Override Controls: Mode & Category Selection Prominently at Top */}
+          {isAdmin && (
+            <div className="p-3.5 bg-gradient-to-br from-[#161622] via-[#121218] to-[#0E0E12] rounded-xl border border-indigo-500/30 space-y-3 shadow-lg">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
+                  লিংকের ধরন নির্বাচন করুন (Admin Link Category)
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono font-bold">
+                  24/7 আনলিমিটেড অ্যাক্সেস
+                </span>
+              </div>
+
+              {/* 4 Cards: VIP Link, Admin Link, Self Member, Proxy Member */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* 1. VIP Link */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategory('vip');
+                    setIsProxyMode(false);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                    category === 'vip'
+                      ? 'bg-gradient-to-br from-amber-500/25 to-amber-950/40 border-amber-500 shadow-md shadow-amber-500/10'
+                      : 'bg-[#181820] border-[#262632] hover:border-amber-500/40 text-gray-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                      <Crown className="w-3.5 h-3.5 text-amber-400" />
+                      VIP লিংক
+                    </span>
+                    {category === 'vip' && <Check className="w-3 h-3 text-amber-400" />}
+                  </div>
+                  <span className="text-[10px] text-gray-400 leading-tight">
+                    সোনালী ব্যাজ ও বিশেষ প্রায়োরিটি
+                  </span>
+                </button>
+
+                {/* 2. Admin Link */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategory('admin');
+                    setIsProxyMode(false);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                    category === 'admin'
+                      ? 'bg-gradient-to-br from-indigo-500/25 to-indigo-950/40 border-indigo-500 shadow-md shadow-indigo-500/10'
+                      : 'bg-[#181820] border-[#262632] hover:border-indigo-500/40 text-gray-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-indigo-300 flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+                      এডমিন লিংক
+                    </span>
+                    {category === 'admin' && <Check className="w-3 h-3 text-indigo-400" />}
+                  </div>
+                  <span className="text-[10px] text-gray-400 leading-tight">
+                    অফিশিয়াল কমিউনিটি নির্দেশনা
+                  </span>
+                </button>
+
+                {/* 3. Regular Member (Self) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategory('member');
+                    setIsProxyMode(false);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                    category === 'member' && !isProxyMode
+                      ? 'bg-gradient-to-br from-blue-500/25 to-blue-950/40 border-blue-500 shadow-md shadow-blue-500/10'
+                      : 'bg-[#181820] border-[#262632] hover:border-blue-500/40 text-gray-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-blue-300 flex items-center gap-1.5">
+                      <UserCheck className="w-3.5 h-3.5 text-blue-400" />
+                      নিজের লিংক
+                    </span>
+                    {category === 'member' && !isProxyMode && <Check className="w-3 h-3 text-blue-400" />}
+                  </div>
+                  <span className="text-[10px] text-gray-400 leading-tight">
+                    এডমিনের নিজস্ব ডেইলি পোস্ট
+                  </span>
+                </button>
+
+                {/* 4. Proxy Member */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategory('member');
+                    setIsProxyMode(true);
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-1.5 ${
+                    isProxyMode
+                      ? 'bg-gradient-to-br from-purple-500/25 to-purple-950/40 border-purple-500 shadow-md shadow-purple-500/10'
+                      : 'bg-[#181820] border-[#262632] hover:border-purple-500/40 text-gray-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-xs text-purple-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      প্রক্সি লিংক
+                    </span>
+                    {isProxyMode && <Check className="w-3 h-3 text-purple-400" />}
+                  </div>
+                  <span className="text-[10px] text-gray-400 leading-tight">
+                    অন্য মেম্বারের হয়ে লিংক দেওয়া
+                  </span>
+                </button>
+              </div>
+
+              {/* Dynamic informative explanation for VIP & Admin categories */}
+              {category === 'vip' && (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-start gap-2">
+                  <Crown className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">👑 VIP লিংক মোড সক্রিয়:</span>
+                    <span className="text-[11px] text-amber-200/90 leading-tight block">
+                      এই লিংকটি মেম্বারদের ডেইলি লিস্টে <strong>সোনালী ক্রাউন ব্যাজ</strong> সহ শীর্ষে বিশেষভাবে হাইলাইট থাকবে। এডমিন যেকোনো সময় যত ইচ্ছা VIP লিংক দিতে পারেন (কোনো দৈনিক লিমিট নেই)।
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {category === 'admin' && (
+                <div className="p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-300 flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block">🛡️ অফিশিয়াল এডমিন লিংক মোড সক্রিয়:</span>
+                    <span className="text-[11px] text-indigo-200/90 leading-tight block">
+                      এই লিংকটি অফিশিয়াল কমিউনিটি লিংক হিসেবে যুক্ত হবে এবং সকল সাধারণ সদস্যদের জন্য সাপোর্ট করা বাধ্যতামূলক থাকবে।
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Proxy Member Selector when isProxyMode is true */}
+              {isProxyMode && (
+                <div className="pt-2 border-t border-[#25252E] space-y-2">
+                  <label className="block text-[11px] font-bold text-gray-300">
+                    কোন মেম্বারের পক্ষ থেকে লিংক দিচ্ছেন? *
+                  </label>
+                  
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      placeholder="মেম্বারের নাম বা ইউজারনেম দিয়ে খুঁজুন..."
+                      value={memberSearch}
+                      onChange={e => setMemberSearch(e.target.value)}
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#18181B] border border-[#27272A] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                    {filteredProxyMembers.map(m => {
+                      const isSel = targetMemberId === m.id;
+                      const hasLinkToday = dailyLinks.some(l => l.memberId === m.id && (!l.category || l.category === 'member'));
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => setTargetMemberId(m.id)}
+                          className={`p-2 rounded-lg flex items-center justify-between cursor-pointer border transition-colors ${
+                            isSel 
+                              ? 'bg-indigo-600/15 border-indigo-500/50 text-white' 
+                              : 'bg-[#18181B]/60 border-transparent hover:bg-[#1E1E20] text-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <img src={m.avatar} alt={m.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
+                            <div className="truncate">
+                              <span className="font-bold text-xs">{m.name}</span>
+                              <span className="text-[10px] text-gray-400 ml-1.5">@{m.username}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            {hasLinkToday && (
+                              <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded">
+                                Has link today
+                              </span>
+                            )}
+                            {isSel && <Check className="w-4 h-4 text-indigo-400" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Scheduling Controls */}
           {activeTab === 'schedule' && (
             <div className="p-3.5 bg-gradient-to-b from-indigo-950/40 to-[#0E0E10] rounded-xl border border-indigo-900/40 space-y-3.5">
@@ -476,132 +674,6 @@ export const LinkSubmissionModal: React.FC<LinkSubmissionModalProps> = ({
             </div>
           )}
 
-          {/* Admin Override Controls: Mode & Category Selection */}
-          {isAdmin && (
-            <div className="p-3.5 bg-[#0E0E10] rounded-xl border border-[#1E1E20] space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-gray-300 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                  এডমিন অপশন (Admin Control)
-                </span>
-                <span className="text-[10px] text-gray-500">যেকোনো সময় যেকোনো লিংক দেওয়ার অনুমতিপ্রাপ্ত</span>
-              </div>
-
-              {/* Mode Switch: Self vs Proxy vs Special */}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProxyMode(false);
-                    setTargetMemberId('');
-                    setCategory('member');
-                  }}
-                  className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border ${
-                    !isProxyMode && category === 'member'
-                      ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40'
-                      : 'bg-[#18181B] text-gray-400 border-transparent hover:text-white'
-                  }`}
-                >
-                  <UserCheck className="w-3.5 h-3.5" />
-                  আমার নিজের লিংক (Self)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsProxyMode(true);
-                    setCategory('member');
-                  }}
-                  className={`py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border ${
-                    isProxyMode
-                      ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40'
-                      : 'bg-[#18181B] text-gray-400 border-transparent hover:text-white'
-                  }`}
-                >
-                  <Crown className="w-3.5 h-3.5 text-amber-400" />
-                  মেম্বারের হয়ে দিন (Proxy)
-                </button>
-              </div>
-
-              {/* Special Category Tabs for Admins */}
-              <div className="flex items-center gap-1.5 pt-1">
-                <span className="text-[11px] text-gray-400 font-semibold mr-1">লিংক ধরন:</span>
-                {(['member', 'admin', 'vip', 'notice'] as LinkCategoryType[]).map(cat => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold capitalize transition-colors border ${
-                      category === cat
-                        ? 'bg-indigo-600 text-white border-indigo-500 shadow-xs'
-                        : 'bg-[#18181B] text-gray-400 border-[#1E1E20] hover:text-gray-200'
-                    }`}
-                  >
-                    {cat === 'member' && 'Member Link'}
-                    {cat === 'admin' && '🛡️ Admin Link'}
-                    {cat === 'vip' && '👑 VIP Link'}
-                    {cat === 'notice' && '📢 Notice Link'}
-                  </button>
-                ))}
-              </div>
-
-              {/* Proxy Member Selector when isProxyMode is true */}
-              {isProxyMode && (
-                <div className="pt-2 border-t border-[#1E1E20] space-y-2">
-                  <label className="block text-[11px] font-bold text-gray-300">
-                    কোন মেম্বারের পক্ষ থেকে লিংক দিচ্ছেন? *
-                  </label>
-                  
-                  <div className="relative">
-                    <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      placeholder="মেম্বারের নাম বা ইউজারনেম দিয়ে খুঁজুন..."
-                      value={memberSearch}
-                      onChange={e => setMemberSearch(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-[#18181B] border border-[#27272A] rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
-                    {filteredProxyMembers.map(m => {
-                      const isSel = targetMemberId === m.id;
-                      const hasLinkToday = dailyLinks.some(l => l.memberId === m.id && (!l.category || l.category === 'member'));
-                      return (
-                        <div
-                          key={m.id}
-                          onClick={() => setTargetMemberId(m.id)}
-                          className={`p-2 rounded-lg flex items-center justify-between cursor-pointer border transition-colors ${
-                            isSel 
-                              ? 'bg-indigo-600/15 border-indigo-500/50 text-white' 
-                              : 'bg-[#18181B]/60 border-transparent hover:bg-[#1E1E20] text-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <img src={m.avatar} alt={m.name} className="w-6 h-6 rounded-full object-cover shrink-0" />
-                            <div className="truncate">
-                              <span className="font-bold text-xs">{m.name}</span>
-                              <span className="text-[10px] text-gray-400 ml-1.5">@{m.username}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {hasLinkToday && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/10 text-amber-400 rounded">
-                                Has link today
-                              </span>
-                            )}
-                            {isSel && <Check className="w-4 h-4 text-indigo-400" />}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Member Identity Card (Auto-filled from Profile) */}
           <div className="p-3.5 bg-[#0E0E10] rounded-xl border border-[#1E1E20] flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -782,16 +854,26 @@ export const LinkSubmissionModal: React.FC<LinkSubmissionModalProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitDisabled}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold rounded-lg flex items-center gap-2 transition-all shadow-lg shadow-indigo-600/20"
+                className={`px-5 py-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold rounded-lg flex items-center gap-2 transition-all shadow-lg ${
+                  category === 'vip' && isAdmin
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black shadow-amber-500/20'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20'
+                }`}
               >
-                {activeTab === 'schedule' ? <Calendar className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                {activeTab === 'schedule' ? <Calendar className="w-4 h-4" /> : category === 'vip' && isAdmin ? <Crown className="w-4 h-4" /> : <Send className="w-4 h-4" />}
                 {isSubmitting 
                   ? 'যাচাই করা হচ্ছে...' 
                   : activeTab === 'schedule'
                     ? `📅 শিডিউল বুক করুন (${scheduleDate} @ ${scheduleTime})`
                     : isAdmin && isProxyMode
-                      ? `সাবমিট করুন (${effectiveTargetMember.name})`
-                      : "আজকের লিংক সাবমিট করুন"
+                      ? `মেম্বারের হয়ে সাবমিট (${effectiveTargetMember.name})`
+                      : isAdmin && category === 'vip'
+                        ? '👑 VIP লিংক সাবমিট করুন'
+                        : isAdmin && category === 'admin'
+                          ? '🛡️ এডমিন লিংক সাবমিট করুন'
+                          : isAdmin && category === 'notice'
+                            ? '📢 নোটিশ লিংক সাবমিট করুন'
+                            : "আজকের লিংক সাবমিট করুন"
                 }
               </button>
             </div>

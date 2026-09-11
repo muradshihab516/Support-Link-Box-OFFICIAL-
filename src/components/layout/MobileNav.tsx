@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Flame, Trophy, Wrench, Shield, User } from 'lucide-react';
+import { LayoutDashboard, Flame, Trophy, Wrench, Shield, User, Megaphone, CheckCircle2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface MobileNavProps {
@@ -9,12 +9,14 @@ interface MobileNavProps {
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, onSubmitLink }) => {
-  const { currentUser, getTodaySupportStats } = useApp();
+  const { currentUser, getTodaySupportStats, announcements, isMemberAllDoneToday } = useApp();
   const stats = currentUser ? getTodaySupportStats(currentUser.id) : null;
+  const unreadAnnouncementsCount = currentUser ? announcements.filter(a => !a.readBy?.includes(currentUser.id)).length : 0;
+  const isAllDoneToday = currentUser ? isMemberAllDoneToday(currentUser.id) : false;
 
   return (
     <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0E0E10]/95 backdrop-blur-lg border-t border-[#1E1E20] pb-safe transition-colors">
-      <div className="grid grid-cols-5 h-16 max-w-md mx-auto px-2">
+      <div className="grid grid-cols-6 h-16 max-w-lg mx-auto px-1">
         {/* Dashboard */}
         <button
           onClick={() => onNavigate('dashboard')}
@@ -25,7 +27,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
           }`}
         >
           <LayoutDashboard className="w-5 h-5" />
-          <span className="text-[10px]">Today</span>
+          <span className="text-[9px]">Today</span>
         </button>
 
         {/* Daily Links */}
@@ -45,7 +47,45 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
               </span>
             )}
           </div>
-          <span className="text-[10px]">Links</span>
+          <span className="text-[9px]">Links</span>
+        </button>
+
+        {/* All Done */}
+        <button
+          onClick={() => onNavigate('all_done')}
+          className={`flex flex-col items-center justify-center gap-1 transition-colors relative ${
+            currentView === 'all_done'
+              ? 'text-emerald-400 font-bold'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <div className="relative">
+            <CheckCircle2 className={`w-5 h-5 ${isAllDoneToday ? 'text-emerald-400' : 'text-emerald-500/70'}`} />
+            {isAllDoneToday && (
+              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-400" />
+            )}
+          </div>
+          <span className="text-[9px]">All Done</span>
+        </button>
+
+        {/* Notice Board */}
+        <button
+          onClick={() => onNavigate('announcements')}
+          className={`flex flex-col items-center justify-center gap-1 transition-colors relative ${
+            currentView === 'announcements'
+              ? 'text-indigo-400 font-bold'
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          <div className="relative">
+            <Megaphone className="w-5 h-5 text-indigo-400" />
+            {unreadAnnouncementsCount > 0 && (
+              <span className="absolute -top-1 -right-2 px-1 py-0.2 bg-rose-500 text-white rounded-full text-[8px] font-bold">
+                {unreadAnnouncementsCount}
+              </span>
+            )}
+          </div>
+          <span className="text-[9px]">Notice</span>
         </button>
 
         {/* Leaderboard */}
@@ -58,20 +98,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
           }`}
         >
           <Trophy className="w-5 h-5 text-amber-500" />
-          <span className="text-[10px]">Ranks</span>
-        </button>
-
-        {/* Free Tools */}
-        <button
-          onClick={() => onNavigate('free_tools')}
-          className={`flex flex-col items-center justify-center gap-1 transition-colors ${
-            currentView === 'free_tools'
-              ? 'text-indigo-400 font-bold'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          <Wrench className="w-5 h-5 text-emerald-500" />
-          <span className="text-[10px]">Tools</span>
+          <span className="text-[9px]">Ranks</span>
         </button>
 
         {/* Profile / Admin */}
@@ -85,7 +112,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             }`}
           >
             <Shield className="w-5 h-5 text-indigo-400" />
-            <span className="text-[10px]">Admin</span>
+            <span className="text-[9px]">Admin</span>
           </button>
         ) : (
           <button
@@ -97,7 +124,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate, o
             }`}
           >
             <User className="w-5 h-5" />
-            <span className="text-[10px]">Profile</span>
+            <span className="text-[9px]">Profile</span>
           </button>
         )}
       </div>

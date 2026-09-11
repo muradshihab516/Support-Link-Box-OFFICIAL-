@@ -54,6 +54,7 @@ export const TodayLinksAdmin: React.FC = () => {
   const [selectedLinkAudit, setSelectedLinkAudit] = useState<string | null>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [submitModalTab, setSubmitModalTab] = useState<'instant' | 'schedule'>('instant');
+  const [submitModalCategory, setSubmitModalCategory] = useState<LinkCategoryType>('member');
   const [editingLink, setEditingLink] = useState<DailyLink | null>(null);
 
   // Scheduled links filters & state
@@ -284,15 +285,46 @@ export const TodayLinksAdmin: React.FC = () => {
         <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
           {adminViewTab === 'live' ? (
             <>
+              {/* VIP Link Button */}
               <button
                 onClick={() => {
+                  setSubmitModalCategory('vip');
                   setSubmitModalTab('instant');
                   setShowSubmitModal(true);
                 }}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                className="px-3 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition-all active:scale-95"
+                title="VIP লিংক সাবমিট করুন (সোনালী ব্যাজ সহ টপ প্রায়োরিটি)"
               >
-                <PlusCircle className="w-4 h-4" />
-                <span>+ Submit Link (Admin / Proxy)</span>
+                <Crown className="w-4 h-4" />
+                <span>+ VIP লিংক</span>
+              </button>
+
+              {/* Admin Link Button */}
+              <button
+                onClick={() => {
+                  setSubmitModalCategory('admin');
+                  setSubmitModalTab('instant');
+                  setShowSubmitModal(true);
+                }}
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all active:scale-95"
+                title="অফিশিয়াল এডমিন লিংক সাবমিট করুন"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                <span>+ এডমিন লিংক</span>
+              </button>
+
+              {/* Proxy / Member Link Button */}
+              <button
+                onClick={() => {
+                  setSubmitModalCategory('member');
+                  setSubmitModalTab('instant');
+                  setShowSubmitModal(true);
+                }}
+                className="px-3 py-2 bg-[#1A1A22] hover:bg-[#242430] border border-[#2D2D3B] text-gray-300 hover:text-white font-bold text-xs rounded-lg flex items-center gap-1.5 transition-all active:scale-95"
+                title="মেম্বারের হয়ে বা নিজের লিংক সাবমিট করুন"
+              >
+                <PlusCircle className="w-4 h-4 text-purple-400" />
+                <span>+ মেম্বার / প্রক্সি লিংক</span>
               </button>
 
               <button
@@ -957,6 +989,7 @@ export const TodayLinksAdmin: React.FC = () => {
         <LinkSubmissionModal
           isOpen={showSubmitModal}
           initialTab={submitModalTab}
+          initialCategory={submitModalCategory}
           onClose={() => setShowSubmitModal(false)}
         />
       )}

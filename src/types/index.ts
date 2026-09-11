@@ -365,6 +365,7 @@ export interface SystemSettings {
 
   // Auto-Admin & Punishment Settings
   punishmentEnabled?: boolean; // default true
+  allDoneStartTime?: string; // default "17:00" (5:00 PM BST)
   allDoneDeadlineTime?: string; // default "00:00" (12:00 AM)
   lateRecoveryStartTime?: string; // default "00:00"
   lateRecoveryEndTime?: string; // default "10:00" (10:00 AM)
@@ -644,4 +645,84 @@ export interface NameChangeRequest {
   reviewedAt?: string;
   adminNote?: string;
 }
+
+// =========================================================================
+// 📢 ANNOUNCEMENT SECTION TYPES
+// =========================================================================
+export type AnnouncementType = 
+  | 'general' 
+  | 'important' 
+  | 'warning' 
+  | 'update' 
+  | 'event' 
+  | 'system_notice' 
+  | 'fastest_supporters';
+
+export interface AnnouncementItem {
+  id: string;
+  title: string;
+  message: string;
+  type: AnnouncementType;
+  issuedBy: string;
+  issuedByRole?: string;
+  issuedByAvatar?: string;
+  publishedAt: string; // ISO string
+  date: string; // YYYY-MM-DD
+  timeBst: string; // e.g. "08:15 PM BST"
+  imageUrl?: string;
+  isImportant?: boolean;
+  isPinned?: boolean;
+  status: 'published' | 'draft' | 'scheduled';
+  scheduledAt?: string;
+  readBy?: string[]; // Array of member IDs who read the announcement
+  createdAt: string;
+  communityId?: string;
+}
+
+// =========================================================================
+// ✅ ALL DONE SECTION TYPES
+// =========================================================================
+export interface AllDoneRecord {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberNumber: number;
+  memberAvatar?: string;
+  date: string; // YYYY-MM-DD
+  submittedAt: string; // ISO
+  submittedAtTimestamp: number; // epoch ms
+  submittedTimeBst: string; // e.g. "05:12:34 PM BST"
+  message?: string;
+  otherIds?: string; // "ABC, XYZ, Shuvo"
+  otherIdLinks?: string; // Links to alternative accounts
+  fastestRank?: number | null; // 1, 2, 3, 4, 5 (if Top 5) or null
+  bonusPoints: number; // 10, 8, 6, 4, 2, or 0
+  basePoints: number; // default 3
+  status: 'verified' | 'pending';
+  communityId: string;
+}
+
+export interface AltIdDisclosure {
+  id: string;
+  allDoneId: string;
+  memberId: string;
+  memberName: string;
+  memberNumber: number;
+  date: string;
+  altNames: string;
+  altIdLinks: string;
+  createdAt: string;
+}
+
+export interface PointActivityTransaction {
+  id: string;
+  memberId: string;
+  activityType: 'ALL_DONE' | 'FASTEST_SUPPORTER_BONUS' | 'SUPPORT_COMPLETION' | 'STREAK_BONUS' | 'ADMIN_ADJUSTMENT';
+  referenceId: string; // e.g. allDoneId or linkId
+  points: number;
+  date: string;
+  note?: string;
+  createdAt: string;
+}
+
 

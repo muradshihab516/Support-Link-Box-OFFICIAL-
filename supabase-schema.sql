@@ -169,3 +169,100 @@ CREATE POLICY "Allow insert/update to daily_links" ON public.daily_links FOR ALL
 CREATE POLICY "Allow insert/update to support_records" ON public.support_records FOR ALL USING (true);
 CREATE POLICY "Allow insert/update to audit_logs" ON public.audit_logs FOR ALL USING (true);
 CREATE POLICY "Allow insert/update to notices" ON public.notices FOR ALL USING (true);
+
+-- 8. Create Announcements Table
+CREATE TABLE IF NOT EXISTS public.announcements (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT DEFAULT 'general',
+    issued_by TEXT NOT NULL,
+    issued_by_role TEXT DEFAULT 'admin',
+    issued_by_avatar TEXT,
+    published_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    date DATE DEFAULT CURRENT_DATE,
+    time_bst TEXT NOT NULL,
+    image_url TEXT,
+    is_important BOOLEAN DEFAULT FALSE,
+    is_pinned BOOLEAN DEFAULT FALSE,
+    status TEXT DEFAULT 'published',
+    scheduled_at TIMESTAMP WITH TIME ZONE,
+    read_by JSONB DEFAULT '[]'::jsonb,
+    community_id TEXT DEFAULT 'comm_default',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_announcements_date ON public.announcements(date DESC);
+CREATE INDEX IF NOT EXISTS idx_announcements_is_pinned ON public.announcements(is_pinned);
+
+-- 9. Create All Done Table (Unique constraint: one All Done per member per day)
+CREATE TABLE IF NOT EXISTS public.all_done (
+    id TEXT PRIMARY KEY,
+    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    member_name TEXT NOT NULL,
+    member_number INTEGER NOT NULL,
+    member_avatar TEXT,
+    date DATE DEFAULT CURRENT_DATE,
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    submitted_at_timestamp BIGINT NOT NULL,
+    submitted_time_bst TEXT NOT NULL,
+    message TEXT,
+    other_ids TEXT,
+    other_id_links TEXT,
+    fastest_rank INTEGER,
+    bonus_points INTEGER DEFAULT 0,
+    base_points INTEGER DEFAULT 3,
+    status TEXT DEFAULT 'verified',
+    community_id TEXT DEFAULT 'comm_default',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_member_all_done_per_day UNIQUE (member_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_all_done_date ON public.all_done(date DESC);
+CREATE INDEX IF NOT EXISTS idx_all_done_member ON public.all_done(member_id);
+CREATE INDEX IF NOT EXISTS idx_all_done_fastest_rank ON public.all_done(date, fastest_rank);
+
+-- 10. Create Alt ID Disclosures Table
+CREATE TABLE IF NOT EXISTS public.alt_id_disclosures (
+    id TEXT PRIMARY KEY,
+    all_done_id TEXT REFERENCES public.all_done(id) ON DELETE CASCADE,
+    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    member_name TEXT NOT NULL,
+    member_number INTEGER NOT NULL,
+    date DATE DEFAULT CURRENT_DATE,
+    alt_names TEXT NOT NULL,
+    alt_id_links TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 11. Create Point Activity Transactions Table
+CREATE TABLE IF NOT EXISTS public.point_transactions (
+    id TEXT PRIMARY KEY,
+    member_id TEXT REFERENCES public.members(id) ON DELETE CASCADE,
+    activity_type TEXT NOT NULL,
+    reference_id TEXT NOT NULL,
+    points INTEGER NOT NULL,
+    date DATE DEFAULT CURRENT_DATE,
+    note TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_member_point_tx UNIQUE (member_id, activity_type, reference_id, date)
+);
+
+-- Enable RLS for new tables
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.all_done ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.alt_id_disclosures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.point_transactions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read access to announcements" ON public.announcements FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to announcements" ON public.announcements FOR ALL USING (true);
+
+CREATE POLICY "Allow public read access to all_done" ON public.all_done FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to all_done" ON public.all_done FOR ALL USING (true);
+
+CREATE POLICY "Allow public read access to alt_id_disclosures" ON public.alt_id_disclosures FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to alt_id_disclosures" ON public.alt_id_disclosures FOR ALL USING (true);
+
+CREATE POLICY "Allow public read access to point_transactions" ON public.point_transactions FOR SELECT USING (true);
+CREATE POLICY "Allow insert/update to point_transactions" ON public.point_transactions FOR ALL USING (true);
+

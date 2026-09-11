@@ -1,10 +1,13 @@
 import { createClient, SupabaseClient, User, Session } from '@supabase/supabase-js';
-import { Member, DailyLink, AuditLog, Notice, Report, UserRole } from '../types';
+import { Member, DailyLink, AuditLog, Notice, Report, UserRole, AnnouncementItem, AllDoneRecord, AltIdDisclosure } from '../types';
 
-// Retrieve Supabase credentials from environment variables
+// Retrieve Supabase credentials from environment variables (supports VITE_ prefix and standard GitHub secret names)
 const env = (import.meta as any).env || {};
-const supabaseUrl = env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || '';
+const rawUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || (typeof process !== 'undefined' ? (process.env?.VITE_SUPABASE_URL || process.env?.SUPABASE_URL) : '') || '';
+const rawAnonKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? (process.env?.VITE_SUPABASE_ANON_KEY || process.env?.SUPABASE_ANON_KEY) : '') || '';
+
+export const supabaseUrl: string = typeof rawUrl === 'string' ? rawUrl.trim().replace(/^['"]|['"]$/g, '') : '';
+export const supabaseAnonKey: string = typeof rawAnonKey === 'string' ? rawAnonKey.trim().replace(/^['"]|['"]$/g, '') : '';
 
 export const isSupabaseConfigured = (): boolean => {
   return (
@@ -132,6 +135,27 @@ export const mapMemberToSupabase = (member: Member): Partial<SupabaseMemberRow> 
     updated_at: new Date().toISOString()
   };
 };
+
+// Track tables that are not yet provisioned in the remote database to avoid repeated network errors and console noise
+const unprovisionedTables = new Set<string>();
+
+export const isTableMissingError = (error: any): boolean => {
+  if (!error) return false;
+  const code = error.code || '';
+  const msg = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+  const details = typeof error.details === 'string' ? error.details.toLowerCase() : '';
+  const hint = typeof error.hint === 'string' ? error.hint.toLowerCase() : '';
+  return (
+    code === 'PGRST205' ||
+    code === '42P01' || // PostgreSQL undefined_table
+    msg.includes('schema cache') ||
+    msg.includes('could not find the table') ||
+    details.includes('schema cache') ||
+    hint.includes('perhaps you meant')
+  );
+};
+
+export const getMissingSupabaseTables = (): string[] => Array.from(unprovisionedTables);
 
 // Supabase Database API Service
 export const supabaseDb = {
@@ -355,6 +379,286 @@ export const supabaseDb = {
       return null;
     }
   },
+
+  // Announcements API
+  async fetchAnnouncements(): Promise<AnnouncementItem[] | null> {
+    if (!supabase) return null;
+    if (unprovisionedTables.has('announcements')) {
+      return this.fetchNoticesFallback();
+    }
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('published_at', { ascending: false });
+
+      if (error) {
+        if (isTableMissingError(error)) {
+          unprovisionedTables.add('announcements');
+          return this.fetchNoticesFallback();
+        }
+        console.warn('Supabase fetchAnnouncements warning:', error.message);
+        return null;
+      }
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        type: r.type || 'general',
+        issuedBy: r.issued_by,
+        issuedByRole: r.issued_by_role,
+        issuedByAvatar: r.issued_by_avatar,
+        publishedAt: r.published_at,
+        date: r.date,
+        timeBst: r.time_bst,
+        imageUrl: r.image_url,
+        isImportant: Boolean(r.is_important),
+        isPinned: Boolean(r.is_pinned),
+        status: r.status || 'published',
+        scheduledAt: r.scheduled_at,
+        readBy: Array.isArray(r.read_by) ? r.read_by : [],
+        createdAt: r.created_at || r.published_at,
+        communityId: r.community_id || 'comm_default'
+      }));
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        unprovisionedTables.add('announcements');
+        return this.fetchNoticesFallback();
+      }
+      console.warn('Supabase fetchAnnouncements exception:', err?.message || err);
+      return null;
+    }
+  },
+
+  async fetchNoticesFallback(): Promise<AnnouncementItem[] | null> {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('notices')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) return null;
+      return (data || []).map((r: any): AnnouncementItem => ({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        type: (r.type as any) || 'general',
+        issuedBy: 'Admin Notice',
+        issuedByRole: 'Admin',
+        publishedAt: r.created_at || new Date().toISOString(),
+        date: r.created_at ? r.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+        timeBst: 'BST',
+        isImportant: r.type === 'alert_warning' || r.type === 'kickout_warning',
+        isPinned: false,
+        status: r.is_active ? 'published' : 'draft',
+        readBy: [],
+        createdAt: r.created_at || new Date().toISOString(),
+        communityId: 'comm_default'
+      }));
+    } catch {
+      return null;
+    }
+  },
+
+  async insertAnnouncement(ann: AnnouncementItem): Promise<boolean> {
+    if (!supabase) return false;
+    if (unprovisionedTables.has('announcements')) {
+      return this.insertNoticeFallback(ann);
+    }
+    try {
+      const { error } = await supabase.from('announcements').upsert({
+        id: ann.id,
+        title: ann.title,
+        message: ann.message,
+        type: ann.type,
+        issued_by: ann.issuedBy,
+        issued_by_role: ann.issuedByRole,
+        issued_by_avatar: ann.issuedByAvatar,
+        published_at: ann.publishedAt,
+        date: ann.date,
+        time_bst: ann.timeBst,
+        image_url: ann.imageUrl,
+        is_important: ann.isImportant,
+        is_pinned: ann.isPinned,
+        status: ann.status,
+        scheduled_at: ann.scheduledAt,
+        read_by: ann.readBy || [],
+        community_id: ann.communityId || 'comm_default'
+      });
+      if (error) {
+        if (isTableMissingError(error)) {
+          unprovisionedTables.add('announcements');
+          return this.insertNoticeFallback(ann);
+        }
+        console.warn('Supabase insertAnnouncement warning:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        unprovisionedTables.add('announcements');
+        return this.insertNoticeFallback(ann);
+      }
+      console.warn('Supabase insertAnnouncement exception:', err?.message || err);
+      return false;
+    }
+  },
+
+  async insertNoticeFallback(ann: AnnouncementItem): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      const { error } = await supabase.from('notices').upsert({
+        id: ann.id,
+        title: ann.title,
+        message: ann.message,
+        type: ann.type || 'announcement',
+        target_type: 'all',
+        is_active: ann.status === 'published',
+        created_at: ann.publishedAt || new Date().toISOString()
+      });
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  async deleteAnnouncement(id: string): Promise<boolean> {
+    if (!supabase) return false;
+    try {
+      if (!unprovisionedTables.has('announcements')) {
+        await supabase.from('announcements').delete().eq('id', id);
+      }
+      await supabase.from('notices').delete().eq('id', id);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  // All Done API
+  async fetchAllDone(date?: string): Promise<AllDoneRecord[] | null> {
+    if (!supabase) return null;
+    if (unprovisionedTables.has('all_done')) return null;
+    try {
+      let query = supabase.from('all_done').select('*').order('submitted_at', { ascending: true });
+      if (date) {
+        query = query.eq('date', date);
+      }
+      const { data, error } = await query;
+      if (error) {
+        if (isTableMissingError(error)) {
+          unprovisionedTables.add('all_done');
+          return null;
+        }
+        console.warn('Supabase fetchAllDone warning:', error.message);
+        return null;
+      }
+      return (data || []).map((r: any) => ({
+        id: r.id,
+        memberId: r.member_id,
+        memberName: r.member_name,
+        memberNumber: r.member_number,
+        memberAvatar: r.member_avatar,
+        date: r.date,
+        submittedAt: r.submitted_at,
+        submittedAtTimestamp: Number(r.submitted_at_timestamp) || new Date(r.submitted_at).getTime(),
+        submittedTimeBst: r.submitted_time_bst,
+        message: r.message,
+        otherIds: r.other_ids,
+        otherIdLinks: r.other_id_links,
+        fastestRank: r.fastest_rank,
+        bonusPoints: Number(r.bonus_points) || 0,
+        basePoints: Number(r.base_points) || 3,
+        status: r.status || 'verified',
+        communityId: r.community_id || 'comm_default'
+      }));
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        unprovisionedTables.add('all_done');
+      }
+      return null;
+    }
+  },
+
+  async insertAllDone(record: AllDoneRecord): Promise<{ success: boolean; message: string }> {
+    if (!supabase) return { success: true, message: 'Saved locally' };
+    if (unprovisionedTables.has('all_done')) {
+      return { success: true, message: 'All Done locally saved (Supabase table pending)' };
+    }
+    try {
+      const { error } = await supabase.from('all_done').insert({
+        id: record.id,
+        member_id: record.memberId,
+        member_name: record.memberName,
+        member_number: record.memberNumber,
+        member_avatar: record.memberAvatar,
+        date: record.date,
+        submitted_at: record.submittedAt,
+        submitted_at_timestamp: record.submittedAtTimestamp,
+        submitted_time_bst: record.submittedTimeBst,
+        message: record.message,
+        other_ids: record.otherIds,
+        other_id_links: record.otherIdLinks,
+        fastest_rank: record.fastestRank,
+        bonus_points: record.bonusPoints,
+        base_points: record.basePoints,
+        status: record.status,
+        community_id: record.communityId
+      });
+      if (error) {
+        if (error.code === '23505') {
+          return { success: false, message: 'আপনি আজ ইতোমধ্যে All Done সাবমিট করেছেন।' };
+        }
+        if (isTableMissingError(error)) {
+          unprovisionedTables.add('all_done');
+          return { success: true, message: 'All Done locally saved (Supabase table pending)' };
+        }
+        console.warn('Supabase insertAllDone warning:', error.message);
+        return { success: false, message: error.message };
+      }
+      return { success: true, message: 'All Done successfully recorded in Supabase' };
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        unprovisionedTables.add('all_done');
+        return { success: true, message: 'All Done locally saved' };
+      }
+      return { success: false, message: err?.message || 'Error saving to Supabase' };
+    }
+  },
+
+  async insertAltIdDisclosure(disclosure: AltIdDisclosure): Promise<boolean> {
+    if (!supabase) return true;
+    if (unprovisionedTables.has('alt_id_disclosures') || unprovisionedTables.has('all_done')) {
+      return true;
+    }
+    try {
+      const { error } = await supabase.from('alt_id_disclosures').insert({
+        id: disclosure.id,
+        all_done_id: disclosure.allDoneId,
+        member_id: disclosure.memberId,
+        member_name: disclosure.memberName,
+        member_number: disclosure.memberNumber,
+        date: disclosure.date,
+        alt_names: disclosure.altNames,
+        alt_id_links: disclosure.altIdLinks,
+        created_at: disclosure.createdAt
+      });
+      if (error) {
+        if (isTableMissingError(error)) {
+          unprovisionedTables.add('alt_id_disclosures');
+          return true;
+        }
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      if (isTableMissingError(err)) {
+        unprovisionedTables.add('alt_id_disclosures');
+      }
+      return true;
+    }
+  }
 };
 
 // Supabase Authentication Service
